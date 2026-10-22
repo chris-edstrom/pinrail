@@ -617,10 +617,6 @@
       .mine.editing {
         background: color-mix(in oklab, var(--pinrail-accent) 5%, var(--pinrail-bg-raised));
       }
-      .mine.editing textarea.note-ta {
-        margin-top: 4px;
-        font-size: 13px;
-      }
       button.icon-btn.ok {
         color: var(--pinrail-accent);
       }
@@ -988,6 +984,117 @@
       }
       textarea.note-ta::placeholder {
         color: var(--pinrail-faint);
+      }
+      /* the field to write in: a line with the text, the microphone and the
+         buttons; wide, the text takes the whole width and the buttons a row
+         under it */
+      .compose {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 2px 4px;
+        margin-top: 6px;
+        padding: 3px 4px;
+        border: 1px solid var(--pinrail-border-strong);
+        border-radius: 6px;
+        background: var(--pinrail-bg);
+      }
+      /* focused, a stronger grey border rather than the accent */
+      .compose:focus-within {
+        border-color: var(--pinrail-faint);
+      }
+      .compose.wide {
+        padding: 4px 4px 3px;
+      }
+      .compose textarea.compose-input {
+        flex: 1;
+        width: auto;
+        min-width: 0;
+        min-height: 0;
+        padding: 3px 8px;
+        font: 12.5px var(--pinrail-sans);
+        line-height: 18px;
+      }
+      .compose.wide textarea.compose-input {
+        flex-basis: 100%;
+      }
+      /* in the wide field, the keys on the left of the buttons' row; no
+         width of their own, so they never widen the field */
+      .compose-keys {
+        display: none;
+        flex: 1 1 0;
+        width: 0;
+        min-width: 0;
+        padding-left: 8px;
+        color: var(--pinrail-faint);
+        font: 11px var(--pinrail-sans);
+        letter-spacing: 0;
+        text-transform: none;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .compose.wide .compose-keys {
+        display: block;
+      }
+      .compose-tools {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex: none;
+      }
+      .compose.wide .compose-tools {
+        margin-left: auto;
+      }
+      /* the SDK puts the microphone here; as a flex box it adds no line
+         height, so the microphone lines up with the buttons */
+      .compose-tools .dictate-slot {
+        display: flex;
+        align-items: center;
+      }
+      .compose-tools .pinrail-dictate {
+        width: 24px;
+        height: 24px;
+        border-radius: 5px;
+      }
+      /* the cancel and add buttons, drawn as the SDK draws the microphone */
+      button.compose-icon {
+        display: inline-grid;
+        place-items: center;
+        width: 24px;
+        height: 24px;
+        padding: 0;
+        border: 0;
+        border-radius: 5px;
+        background: none;
+        color: var(--pinrail-faint);
+        cursor: pointer;
+      }
+      button.compose-icon:hover:not(:disabled) {
+        background: var(--pinrail-bg-hover);
+        color: var(--pinrail-text);
+      }
+      /* the add button: an arrow in a filled circle, in the accent colour
+         once there is text to add */
+      button.compose-send,
+      button.compose-send:hover:not(:disabled) {
+        width: 22px;
+        height: 22px;
+        margin: 1px;
+        border-radius: 50%;
+        background: var(--pinrail-accent);
+        color: var(--pinrail-accent-fg, #fff);
+      }
+      button.compose-send:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--pinrail-accent) 85%, var(--pinrail-text));
+      }
+      button.compose-send svg {
+        stroke-width: 2.5;
+      }
+      button.compose-send:disabled {
+        background: var(--pinrail-bg-hover);
+        color: var(--pinrail-faint);
+        cursor: default;
       }
       .note-del {
         flex: none;
@@ -2233,13 +2340,19 @@
             : action === "reject"
               ? "Why reject? It becomes a lesson future reviews follow, e.g. out of scope for this change"
               : "A note to the agent, saved with whichever decision you make";
+        // an empty note removes it, so its button is never disabled
         return `<div class="note editing ${kind}">
     <span class="note-text">
-      <span class="note-label">${label}<span class="note-hint">Enter to save · Esc to cancel</span></span>
-      <textarea class="note-ta" id="note-${esc(String(p.id))}" data-note-ta="${p.id}" data-pinrail-dictate rows="1" placeholder="${esc(ph)}" aria-label="note for proposal ${p.id}">${esc(st.draft || "")}</textarea>
+      <span class="note-label">${label}</span>
+      ${composeHtml({
+        id: `note-${p.id}`,
+        attrs: `data-note-ta="${p.id}" aria-label="note for proposal ${p.id}"`,
+        value: st.draft || "",
+        placeholder: ph,
+        keys: "Enter to save · Shift+Enter for a new line",
+        send: { act: "save-note", attrs: `data-id="${p.id}"`, label: "Save", allowEmpty: true },
+      })}
     </span>
-    <span class="dictate-slot" data-pinrail-dictate-for="note-${esc(String(p.id))}"></span>
-    <button class="icon-btn" data-act="save-note" data-id="${p.id}" title="Save">${Pinrail.icon("check", { size: 15, label: "Save" })}</button>
   </div>`;
       }
       function threadBlockHtml(p) {
@@ -2359,6 +2472,26 @@
     ${noteEd || (note ? noteBlockHtml(p, dec) : "")}</div>`;
       }
 
+      /* ---------- render: the field to write in ---------- */
+      /* One box with the text, the microphone and the buttons at its end, as
+         the change map draws it. Once the text wraps or has a new line, the
+         text takes the whole width and the buttons a row under it, with the
+         keys on their left (fitNote decides). The add button is an arrow in
+         a filled circle, greyed while there is nothing to add, unless an
+         empty field means something, as an empty note removes the note. */
+      function composeHtml({ id, attrs, value, placeholder, keys, cancel, send }) {
+        const empty = !value.trim() && !send.allowEmpty;
+        return `<div class="compose">
+    <textarea class="note-ta compose-input" id="${esc(id)}" ${attrs} data-pinrail-dictate rows="1" placeholder="${esc(placeholder)}">${esc(value)}</textarea>
+    <span class="compose-keys">${esc(keys)}</span>
+    <span class="compose-tools">
+      <span class="dictate-slot" data-pinrail-dictate-for="${esc(id)}"></span>
+      ${cancel ? `<button class="compose-icon" data-act="${cancel.act}" title="Cancel (Esc)">${Pinrail.icon("x", { size: 15, label: "Cancel" })}</button>` : ""}
+      <button class="compose-icon compose-send" data-act="${send.act}" ${send.attrs || ""}${send.allowEmpty ? " data-allow-empty" : ""} title="${esc(send.label)} (Enter)"${empty ? " disabled" : ""}>${Pinrail.icon("arrow-up", { size: 13, label: send.label })}</button>
+    </span>
+  </div>`;
+      }
+
       /* ---------- render: reviewer's comments / composer ---------- */
       const anchorOf = (x) => `${x.file.split("/").pop()}:${x.line}${x.side === "old" ? " (old)" : ""}`;
       function manualHtml(m) {
@@ -2374,12 +2507,18 @@
       }
       function composerHtml() {
         const c = S.composer;
+        const editing = c.editId != null;
         return `<div class="mine editing">
-    <div class="mine-head">${Pinrail.icon("message-square", { size: 13 })}<span class="mine-label">YOUR COMMENT</span><span class="mine-at">${esc(anchorOf(c))}</span><span class="mine-hint">Enter to ${c.editId != null ? "save" : "add"} · Esc to cancel</span><span class="grow"></span>
-      <span class="dictate-slot" data-pinrail-dictate-for="composer-ta"></span>
-      <button class="icon-btn" data-act="cancel-composer" title="Cancel">${Pinrail.icon("x", { size: 15, label: "Cancel" })}</button>
-      <button class="icon-btn ok" data-act="save-composer" title="${c.editId != null ? "Save" : "Add comment"}">${Pinrail.icon("check", { size: 15, label: c.editId != null ? "Save" : "Add comment" })}</button></div>
-    <textarea class="note-ta" id="composer-ta" data-pinrail-dictate rows="1" placeholder="What should the agent look at here? e.g. is this bucket cleanup handled anywhere?" aria-label="your comment">${esc(c.text || "")}</textarea>
+    <div class="mine-head">${Pinrail.icon("message-square", { size: 13 })}<span class="mine-label">YOUR COMMENT</span><span class="mine-at">${esc(anchorOf(c))}</span></div>
+    ${composeHtml({
+      id: "composer-ta",
+      attrs: `aria-label="your comment"`,
+      value: c.text || "",
+      placeholder: "What should the agent look at here? e.g. is this bucket cleanup handled anywhere?",
+      keys: `Enter to ${editing ? "save" : "add"} · Shift+Enter for a new line`,
+      cancel: { act: "cancel-composer" },
+      send: { act: "save-composer", label: editing ? "Save" : "Add comment" },
+    })}
   </div>`;
       }
 
@@ -2858,10 +2997,25 @@
         restoreFocus(focusDesc);
         syncStatus();
       }
-      // a note field grows with what is written in it
+      // a field grows with what is written in it, up to about eight lines,
+      // and goes wide once its text wraps or has a new line
+      const FIELD_MAX = 150;
       function fitNote(el) {
+        const box = el.closest(".compose");
+        if (box) {
+          if (!el.value) box.classList.remove("wide");
+          else if (!box.classList.contains("wide")) {
+            el.style.height = "auto";
+            const cs = getComputedStyle(el);
+            const oneLine = parseFloat(cs.lineHeight) + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+            if (el.value.includes("\n") || el.scrollHeight > oneLine * 1.4) box.classList.add("wide");
+          }
+          const send = box.querySelector(".compose-send");
+          if (send && !send.hasAttribute("data-allow-empty")) send.disabled = !el.value.trim();
+        }
         el.style.height = "auto";
-        el.style.height = el.scrollHeight + "px";
+        el.style.height = Math.min(el.scrollHeight, FIELD_MAX) + "px";
+        el.style.overflowY = el.scrollHeight > FIELD_MAX ? "auto" : "hidden";
       }
       document.addEventListener("input", (e) => {
         if (e.target.matches && e.target.matches("[data-note-ta], #composer-ta")) fitNote(e.target);
