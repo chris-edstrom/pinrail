@@ -831,6 +831,9 @@ pub(crate) fn sdk_dir(exe: &Path) -> Option<PathBuf> {
     let mut resources = Vec::new();
     if cfg!(target_os = "macos") {
         resources.push(dir.join("../Resources"));
+    } else if cfg!(windows) {
+        // the NSIS installer puts resources beside the executable
+        resources.push(dir.to_path_buf());
     } else {
         resources.push(dir.join("../lib").join(PRODUCT));
         if let Some(appdir) = std::env::var_os("APPDIR") {
