@@ -381,85 +381,18 @@
       .pinrail-item-controls {
         width: 100%;
       }
-      /* the note, as the change map draws its field: a line with the text
-         and the microphone; wide, once the text wraps or has a new line,
-         the text takes the whole width and the microphone a row under it.
-         The note is kept as it is typed, so there is no button to add it. */
-      .compose {
+      /* the note, the SDK's comment field: a line with the text and the
+         microphone, and the microphone on a row under the text once it wraps.
+         The note is kept as it is typed, so there is no button to add it. It
+         takes the row beside the verdict, shows its keys only while it is
+         written in, and a long note at rest shows its text alone. */
+      .pinrail-compose {
         flex: 1 1 260px;
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 2px 4px;
         min-height: 32px;
-        box-sizing: border-box;
-        padding: 3px 4px;
-        border: 1px solid var(--pinrail-border-strong);
-        border-radius: 6px;
-        background: var(--pinrail-bg);
       }
-      .compose:focus-within {
-        border-color: var(--pinrail-faint);
-      }
-      .compose.wide {
-        padding: 4px 4px 3px;
-      }
-      .compose textarea {
-        flex: 1;
-        min-width: 0;
-        box-sizing: border-box;
-        padding: 3px 8px;
-        border: 0;
-        background: none;
-        color: var(--pinrail-text);
-        font: 12.5px var(--pinrail-sans);
-        line-height: 18px;
-        resize: none;
-        overflow: hidden;
-      }
-      .compose textarea:focus {
-        outline: none;
-      }
-      .compose.wide textarea {
-        flex-basis: 100%;
-      }
-      .compose-keys {
+      .pinrail-compose-wide:not(:focus-within) .pinrail-compose-keys,
+      .pinrail-compose-wide:not(:focus-within) .pinrail-compose-tools {
         display: none;
-        flex: 1 1 0;
-        width: 0;
-        min-width: 0;
-        padding-left: 8px;
-        color: var(--pinrail-faint);
-        font: 11px var(--pinrail-sans);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .compose.wide:focus-within .compose-keys {
-        display: block;
-      }
-      .compose-tools {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        flex: none;
-      }
-      .compose.wide .compose-tools {
-        margin-left: auto;
-      }
-      /* a long note at rest shows its text alone; the row under it comes
-         back when it is written in */
-      .compose.wide:not(:focus-within) .compose-tools {
-        display: none;
-      }
-      .compose-tools .note-mic {
-        display: flex;
-        align-items: center;
-      }
-      .compose-tools .pinrail-dictate {
-        width: 24px;
-        height: 24px;
-        border-radius: 5px;
       }
       .note-ro {
         flex: 1 1 260px;
@@ -841,10 +774,10 @@
               : "note (optional)";
         return `<div class="pinrail-item ${cls}" data-id="${item.id}">${head}
     <div class="pinrail-item-controls">
-      <div class="compose">
-        <textarea rows="1" id="note-${item.id}" data-note="${item.id}" data-pinrail-dictate placeholder="${placeholder}" aria-label="note for item ${esc(item.id)}">${esc(d.note || "")}</textarea>
-        <span class="compose-keys">Shift+Enter for a new line</span>
-        <span class="compose-tools">
+      <div class="pinrail-compose">
+        <textarea class="pinrail-compose-input" rows="1" id="note-${item.id}" data-note="${item.id}" data-pinrail-dictate placeholder="${placeholder}" aria-label="note for item ${esc(item.id)}">${esc(d.note || "")}</textarea>
+        <span class="pinrail-compose-keys">Shift+Enter for a new line</span>
+        <span class="pinrail-compose-tools">
           <span class="note-mic" data-pinrail-dictate-for="note-${item.id}"></span>
         </span>
       </div>
@@ -901,23 +834,6 @@
         if (!readonly) syncStatus();
       }
 
-      /* A note grows with its text, up to about eight lines, and goes wide
-         once the text wraps or has a new line. */
-      const FIELD_MAX = 150;
-      function fitField(el) {
-        const box = el.closest(".compose");
-        if (!el.value) box.classList.remove("wide");
-        else if (!box.classList.contains("wide")) {
-          el.style.height = "auto";
-          const cs = getComputedStyle(el);
-          const oneLine = parseFloat(cs.lineHeight) + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
-          if (el.value.includes("\n") || el.scrollHeight > oneLine * 1.4) box.classList.add("wide");
-        }
-        el.style.height = "auto";
-        el.style.height = `${Math.min(el.scrollHeight, FIELD_MAX)}px`;
-        el.style.overflowY = el.scrollHeight > FIELD_MAX ? "auto" : "hidden";
-      }
-
       function bind() {
         if (readonly) return;
         const app = view.content;
@@ -925,9 +841,9 @@
           .querySelectorAll("button[data-act]")
           .forEach((b) => (b.onclick = () => setAction(+b.dataset.id, b.dataset.act)));
         app.querySelectorAll("textarea[data-note]").forEach((t) => {
-          fitField(t);
+          Pinrail.fitField(t);
           t.oninput = () => {
-            fitField(t);
+            Pinrail.fitField(t);
             setNote(+t.dataset.note, t.value);
           };
           t.onkeydown = (e) => {

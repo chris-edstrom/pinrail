@@ -675,9 +675,9 @@ test("a proposal's note and your own comment can be dictated, from a microphone 
   const f = plugin.frame;
   const card = f.locator(".card").first();
   await card.getByRole("button", { name: "Add instruction" }).click();
-  const note = card.locator("textarea.note-ta");
+  const note = card.locator("textarea[data-note-ta]");
   await expect(note).toBeFocused();
-  await card.locator(".dictate-slot").getByRole("button", { name: "Dictate" }).click();
+  await card.locator("[data-pinrail-dictate-for]").getByRole("button", { name: "Dictate" }).click();
   await plugin.say("re-enqueue it");
   await plugin.say("re-enqueue it with a run at");
   await expect(note).toHaveValue("re-enqueue it with a run at");
@@ -689,6 +689,6 @@ test("without the app's dictation a note has no microphone", async ({ page }) =>
   const plugin = await mountPlugin(page, dir, { review: webhooks() });
   const card = plugin.frame.locator(".card").first();
   await card.getByRole("button", { name: "Add instruction" }).click();
-  await expect(card.locator("textarea.note-ta")).toBeVisible();
+  await expect(card.locator("textarea[data-note-ta]")).toBeVisible();
   await expect(plugin.frame.getByRole("button", { name: "Dictate" })).toHaveCount(0);
 });

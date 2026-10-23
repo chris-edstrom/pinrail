@@ -591,117 +591,6 @@
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-      /* the field to write in, as the change map draws it: a line with the
-     text, the microphone and the buttons; wide, once the text wraps or has
-     a new line, the text takes the whole width and the buttons a row under
-     it, with the keys on their left */
-      .compose {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 2px 4px;
-        padding: 3px 4px;
-        border: 1px solid var(--pinrail-border-strong);
-        border-radius: 6px;
-        background: var(--pinrail-bg);
-      }
-      .compose:focus-within {
-        border-color: var(--pinrail-faint);
-      }
-      .compose.wide {
-        padding: 4px 4px 3px;
-      }
-      .compose textarea {
-        flex: 1;
-        min-width: 0;
-        box-sizing: border-box;
-        padding: 3px 8px;
-        border: 0;
-        background: none;
-        color: var(--pinrail-text);
-        font: 12.5px var(--pinrail-sans);
-        line-height: 18px;
-        resize: none;
-        overflow: hidden;
-      }
-      .compose textarea:focus {
-        outline: none;
-      }
-      .compose.wide textarea {
-        flex-basis: 100%;
-      }
-      .compose-keys {
-        display: none;
-        flex: 1 1 0;
-        width: 0;
-        min-width: 0;
-        padding-left: 8px;
-        color: var(--pinrail-faint);
-        font: 11px var(--pinrail-sans);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .compose.wide .compose-keys {
-        display: block;
-      }
-      .compose-tools {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        flex: none;
-      }
-      .compose.wide .compose-tools {
-        margin-left: auto;
-      }
-      .compose-tools .dictate-slot {
-        display: flex;
-        align-items: center;
-      }
-      .compose-tools .pinrail-dictate {
-        width: 24px;
-        height: 24px;
-        border-radius: 5px;
-      }
-      /* the cancel and add buttons, drawn as the SDK draws the microphone */
-      button.compose-icon {
-        display: inline-grid;
-        place-items: center;
-        width: 24px;
-        height: 24px;
-        padding: 0;
-        border: 0;
-        border-radius: 5px;
-        background: none;
-        color: var(--pinrail-faint);
-        cursor: pointer;
-      }
-      button.compose-icon:hover:not(:disabled) {
-        background: var(--pinrail-bg-hover);
-        color: var(--pinrail-text);
-      }
-      /* the add button: an arrow in a filled circle, in the accent colour once
-     there is text to add */
-      button.compose-send,
-      button.compose-send:hover:not(:disabled) {
-        width: 22px;
-        height: 22px;
-        margin: 1px;
-        border-radius: 50%;
-        background: var(--pinrail-accent);
-        color: var(--pinrail-accent-fg, #fff);
-      }
-      button.compose-send:hover:not(:disabled) {
-        background: color-mix(in srgb, var(--pinrail-accent) 85%, var(--pinrail-text));
-      }
-      button.compose-send svg {
-        stroke-width: 2.5;
-      }
-      button.compose-send:disabled {
-        background: var(--pinrail-bg-hover);
-        color: var(--pinrail-faint);
-        cursor: default;
-      }
       .pinrail-btn {
         padding: 5px 11px;
         border-radius: 7px;
@@ -1669,38 +1558,27 @@
     }`;
       }
 
-      /* One box with the text, the microphone and the buttons at its end; see
-   fitField for when it goes wide. */
+      /* The SDK's comment field: one box with the text, the microphone and the
+         buttons at its end, whose icons the stylesheet draws; see fitField. */
       function composeHtml({ id, label, value = "", placeholder, keys, cancel, send }) {
         const empty = !value.trim() && !send.allowEmpty;
-        return `<div class="compose">
-    <textarea id="${id}" data-pinrail-dictate rows="1" aria-label="${esc(label)}" placeholder="${esc(placeholder)}">${esc(value)}</textarea>
-    <span class="compose-keys">${esc(keys)}</span>
-    <span class="compose-tools">
-      <span class="dictate-slot" data-pinrail-dictate-for="${id}"></span>
-      ${cancel ? `<button type="button" class="compose-icon" ${cancel} title="Cancel (Esc)">${Pinrail.icon("x", { size: 15, label: "Cancel" })}</button>` : ""}
-      <button type="button" class="compose-icon compose-send" ${send.attrs}${send.allowEmpty ? " data-allow-empty" : ""} title="${esc(send.label)} (Enter)"${empty ? " disabled" : ""}>${Pinrail.icon("arrow-up", { size: 13, label: send.label })}</button>
+        return `<div class="pinrail-compose">
+    <textarea class="pinrail-compose-input" id="${id}" data-pinrail-dictate rows="1" aria-label="${esc(label)}" placeholder="${esc(placeholder)}">${esc(value)}</textarea>
+    <span class="pinrail-compose-keys">${esc(keys)}</span>
+    <span class="pinrail-compose-tools">
+      <span data-pinrail-dictate-for="${id}"></span>
+      ${cancel ? `<button type="button" class="pinrail-compose-icon pinrail-compose-cancel" ${cancel} title="Cancel (Esc)" aria-label="Cancel"></button>` : ""}
+      <button type="button" class="pinrail-compose-icon pinrail-compose-send" ${send.attrs}${send.allowEmpty ? " data-allow-empty" : ""} title="${esc(send.label)} (Enter)" aria-label="${esc(send.label)}"${empty ? " disabled" : ""}></button>
     </span>
   </div>`;
       }
-      /* A field grows with its text, up to about eight lines, and goes wide once
-   the text wraps or has a new line. */
-      const FIELD_MAX = 150;
+      /* A field grows with its text, as the SDK sizes it, and its add button
+         waits for text unless an empty field means something. */
       function fitField(el) {
-        const box = el?.closest(".compose");
-        if (!box) return;
-        if (!el.value) box.classList.remove("wide");
-        else if (!box.classList.contains("wide")) {
-          el.style.height = "auto";
-          const cs = getComputedStyle(el);
-          const oneLine = parseFloat(cs.lineHeight) + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
-          if (el.value.includes("\n") || el.scrollHeight > oneLine * 1.4) box.classList.add("wide");
-        }
-        const send = box.querySelector(".compose-send");
+        if (!el) return;
+        Pinrail.fitField(el);
+        const send = el.closest(".pinrail-compose")?.querySelector(".pinrail-compose-send");
         if (send && !send.hasAttribute("data-allow-empty")) send.disabled = !el.value.trim();
-        el.style.height = "auto";
-        el.style.height = `${Math.min(el.scrollHeight, FIELD_MAX)}px`;
-        el.style.overflowY = el.scrollHeight > FIELD_MAX ? "auto" : "hidden";
       }
 
       function renderSheet() {
