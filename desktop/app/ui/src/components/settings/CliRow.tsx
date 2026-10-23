@@ -24,11 +24,13 @@ const invoke = <T,>(command: string) => import("@tauri-apps/api/core").then(({ i
 
 /** ~ in place of the home folder, which the link's path starts with. */
 const tilde = (link: string) => {
-  const home = /^(.*)\/\.local\/bin\/pinrail$/.exec(link)?.[1];
-  return (p: string) => (home && p.startsWith(home + "/") ? "~" + p.slice(home.length) : p);
+  const found = /^(.*?)([\\/])\.local[\\/]bin[\\/]pinrail(\.exe)?$/.exec(link);
+  const home = found?.[1];
+  const sep = found?.[2] ?? "/";
+  return (p: string) => (home && p.startsWith(home + sep) ? "~" + p.slice(home.length) : p);
 };
 
-const folder = (p: string) => p.replace(/\/pinrail$/, "");
+const folder = (p: string) => p.replace(/[\\/]pinrail(\.exe)?$/, "");
 
 /** The CLI's status while `open`, looked at again when the window comes back
  * (from a terminal where the PATH was changed), and the install. */
@@ -95,7 +97,7 @@ export function CliRow({ open }: { open: boolean }) {
     </span>
   ) : (
     <span>
-      {verb} <span className="mono">pinrail</span> into <span className="mono">{folder(link)}</span>, so agents and
+      {verb} <span className="mono">{status.link.endsWith(".exe") ? "pinrail.exe" : "pinrail"}</span> into <span className="mono">{folder(link)}</span>, so agents and
       scripts can run it
     </span>
   );

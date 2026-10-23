@@ -398,6 +398,10 @@ async fn install_cli() -> Result<cli_install::Status, String> {
         let mode = cli_install::mode(&bundled, cli_install::in_appimage());
         let link = cli_install::link_path(&home);
         cli_install::install(mode, &bundled, &link)?;
+        #[cfg(windows)]
+        if let Some(dir) = link.parent() {
+            cli_install::add_to_user_path(dir)?;
+        }
         let shell = cli_install::ask_login_shell();
         Ok(cli_install::status(
             mode,

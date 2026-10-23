@@ -10,6 +10,10 @@
 //!   `~/.local/bin/pinrail` instead, and a copy from an older AppImage can be
 //!   replaced by installing again.
 //!
+//! - Windows: the bundle carries the CLI as `pinrail-cli.exe` beside
+//!   `Pinrail.exe`. Installing copies it to `~\.local\bin\pinrail.exe`, since
+//!   a link needs a privilege, and puts that folder on the user's PATH.
+//!
 //! A development build has no bundled CLI.
 
 use std::io::{BufRead, BufReader, Read};
@@ -20,10 +24,20 @@ use std::time::Duration;
 
 use serde::Serialize;
 
-/// The CLI's name in a macOS bundle, beside `Pinrail`.
-const SIDECAR: &str = "pinrail-cli";
+/// The CLI's name in a macOS or Windows bundle, beside `Pinrail`.
+const SIDECAR: &str = if cfg!(windows) {
+    "pinrail-cli.exe"
+} else {
+    "pinrail-cli"
+};
 /// The name a shell runs it by, and its name in the Linux builds.
-const COMMAND: &str = "pinrail";
+const COMMAND: &str = if cfg!(windows) {
+    "pinrail.exe"
+} else {
+    "pinrail"
+};
+/// What `COMMAND --version` starts its answer with.
+const PROGRAM: &str = "pinrail";
 /// How long a login shell may take to say what its PATH is.
 const SHELL_TIMEOUT: Duration = Duration::from_secs(4);
 /// How long `pinrail --version` may take when telling an old copy apart.
@@ -77,7 +91,7 @@ pub fn bundled() -> Option<PathBuf> {
 /// How this run of the app installs `bundled`: a copy under an AppImage, the
 /// package's own file for a CLI named `pinrail`, and a link otherwise.
 pub fn mode(bundled: &Path, appimage: bool) -> Mode {
-    if appimage {
+    if appimage || cfg!(windows) {
         Mode::Copy
     } else if bundled.file_name().is_some_and(|n| n == COMMAND) {
         Mode::Package
@@ -91,7 +105,7 @@ pub fn in_appimage() -> bool {
     std::env::var_os("APPIMAGE").is_some()
 }
 
-/// `~/.local/bin/pinrail`.
+/// `~/.local/bin/pinrail`, with `.exe` on Windows.
 pub fn link_path(home: &Path) -> PathBuf {
     home.join(".local").join("bin").join(COMMAND)
 }
@@ -218,7 +232,7 @@ pub fn refresh(bundled: &Path, link: &Path) -> Result<bool, String> {
 /// Copies beside `link` and renames over it, so a terminal never runs half a
 /// file, and a link in its place is replaced rather than written through.
 fn copy(bundled: &Path, link: &Path) -> Result<(), String> {
-    let partial = link.with_file_name(format!(".{COMMAND}.partial"));
+    let partial = link.with_file_name(format!(".{PROGRAM}.partial"));
     let result = std::fs::copy(bundled, &partial)
         .and_then(|_| executable(&partial))
         .and_then(|_| std::fs::rename(&partial, link));
@@ -268,7 +282,7 @@ fn is_pinrail_cli(path: &Path) -> bool {
         let _ = child.kill();
     }
     let _ = child.wait();
-    text.is_some_and(|t| t.starts_with(&format!("{COMMAND} ")))
+    text.is_some_and(|t| t.starts_with(&format!("{PROGRAM} ")))
 }
 
 /// Starts `command`, and tries again for up to half a second while Linux
@@ -341,7 +355,9 @@ pub struct ShellView {
     pub command: Option<PathBuf>,
 }
 
+#[cfg_attr(windows, allow(dead_code))]
 const PATH_MARK: &str = "__pinrail_path__=";
+#[cfg_attr(windows, allow(dead_code))]
 const COMMAND_MARK: &str = "__pinrail_command__=";
 
 /// Asks the user's login shell, the way a new terminal starts it. The app
@@ -350,6 +366,14 @@ const COMMAND_MARK: &str = "__pinrail_command__=";
 /// start-up files may print their own. None when the shell does not answer
 /// in time.
 pub fn ask_login_shell() -> Option<ShellView> {
+    #[cfg(windows)]
+    return Some(windows_view());
+    #[cfg(not(windows))]
+    ask_unix_login_shell()
+}
+
+#[cfg(not(windows))]
+fn ask_unix_login_shell() -> Option<ShellView> {
     #[cfg(unix)]
     let uid = rustix::process::getuid().as_raw();
     #[cfg(not(unix))]
@@ -361,6 +385,7 @@ pub fn ask_login_shell() -> Option<ShellView> {
 /// The shell a new terminal starts: SHELL, which an app started from a
 /// Linux desktop may not have, else the account's shell in `passwd`, else
 /// `/bin/sh`, which every Unix has.
+#[cfg_attr(windows, allow(dead_code))]
 fn login_shell(variable: Option<String>, passwd: &str, uid: u32) -> String {
     if let Some(shell) = variable.filter(|s| !s.is_empty()) {
         return shell;
@@ -374,6 +399,7 @@ fn login_shell(variable: Option<String>, passwd: &str, uid: u32) -> String {
         .unwrap_or_else(|| "/bin/sh".to_string())
 }
 
+#[cfg_attr(windows, allow(dead_code))]
 fn ask_shell(shell: &str) -> Option<ShellView> {
     let script = format!(
         r#"printf '\n{PATH_MARK}%s\n' "$PATH"; printf '{COMMAND_MARK}%s\n' "$(command -v {COMMAND} 2>/dev/null)""#
@@ -394,6 +420,119 @@ fn ask_shell(shell: &str) -> Option<ShellView> {
     parse_shell(&text)
 }
 
+/// What a new terminal sees on Windows: the PATH the registry holds, the
+/// user's folders before the machine's, and the first `pinrail.exe` on it.
+#[cfg(windows)]
+fn windows_view() -> ShellView {
+    let user = registry_path("HKCU\\Environment");
+    let machine =
+        registry_path("HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment");
+    let path = [user, machine]
+        .into_iter()
+        .flatten()
+        .flat_map(|raw| split_registry_path(&raw))
+        .collect::<Vec<_>>();
+    let command = path
+        .iter()
+        .map(|dir| dir.join(COMMAND))
+        .find(|p| p.is_file());
+    ShellView { path, command }
+}
+
+/// The raw `Path` value under a registry key, with its `%VARIABLES%` unexpanded.
+#[cfg(windows)]
+fn registry_path(key: &str) -> Option<String> {
+    use std::os::windows::process::CommandExt;
+    let out = Command::new("reg")
+        .args(["query", key, "/v", "Path"])
+        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    parse_reg_query(&String::from_utf8_lossy(&out.stdout))
+}
+
+/// The data of the `Path` line of `reg query`: `    Path    REG_EXPAND_SZ    C:\a;C:\b`.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn parse_reg_query(text: &str) -> Option<String> {
+    text.lines().find_map(|line| {
+        let (name, rest) = line.trim().split_once(char::is_whitespace)?;
+        let rest = rest.trim_start();
+        let (kind, data) = rest.split_once(char::is_whitespace).unwrap_or((rest, ""));
+        let data = data.trim();
+        (name.eq_ignore_ascii_case("path") && kind.starts_with("REG_")).then(|| data.to_string())
+    })
+}
+
+/// The folders of a registry PATH value, `%VARIABLES%` expanded from the
+/// environment; one that is not set stays as written.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn split_registry_path(raw: &str) -> Vec<PathBuf> {
+    raw.split(';')
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| PathBuf::from(expand_variables(s.trim())))
+        .collect()
+}
+
+#[cfg_attr(not(windows), allow(dead_code))]
+fn expand_variables(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(start) = rest.find('%') {
+        out.push_str(&rest[..start]);
+        let after = &rest[start + 1..];
+        match after.find('%') {
+            Some(end) if end > 0 => {
+                match std::env::var(&after[..end]) {
+                    Ok(value) => out.push_str(&value),
+                    Err(_) => out.push_str(&rest[start..start + end + 2]),
+                }
+                rest = &after[end + 1..];
+            }
+            _ => {
+                out.push('%');
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Puts `dir` at the end of the user's PATH, if it is not there, keeping the
+/// `%VARIABLES%` the value already has. PowerShell sets it, since writing the
+/// user's environment there also tells running programs, such as Explorer,
+/// so that a terminal opened next sees it. True when the PATH changed.
+#[cfg(windows)]
+pub fn add_to_user_path(dir: &Path) -> Result<bool, String> {
+    use std::os::windows::process::CommandExt;
+    const SCRIPT: &str = r#"
+$key = 'HKCU:\Environment'
+$raw = (Get-Item $key).GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+$dir = $env:PINRAIL_ADD_DIR
+if ($raw -split ';' | Where-Object { $_.TrimEnd('\') -ieq $dir.TrimEnd('\') }) { exit 3 }
+$new = if ($raw) { $raw.TrimEnd(';') + ';' + $dir } else { $dir }
+Set-ItemProperty -Path $key -Name Path -Value $new -Type ExpandString
+[Environment]::SetEnvironmentVariable('PINRAIL_PATH_CHANGED', $null, 'User')
+"#;
+    let status = Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", SCRIPT])
+        .env("PINRAIL_ADD_DIR", dir)
+        .creation_flags(0x0800_0000)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|e| format!("cannot update the PATH: {e}"))?;
+    match status.code() {
+        Some(0) => Ok(true),
+        Some(3) => Ok(false),
+        _ => Err(format!("cannot add {} to the PATH", dir.display())),
+    }
+}
+
+#[cfg_attr(windows, allow(dead_code))]
 fn parse_shell(text: &str) -> Option<ShellView> {
     let mut view = ShellView::default();
     let mut saw_path = false;
@@ -415,6 +554,29 @@ fn parse_shell(text: &str) -> Option<ShellView> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_registry_path_is_read_from_reg_querys_line() {
+        let out = "\r\nHKEY_CURRENT_USER\\Environment\r\n    Path    REG_EXPAND_SZ    %USERPROFILE%\\bin;C:\\tools\r\n\r\n";
+        assert_eq!(
+            parse_reg_query(out).as_deref(),
+            Some("%USERPROFILE%\\bin;C:\\tools")
+        );
+        assert_eq!(parse_reg_query("ERROR: not found"), None);
+    }
+
+    #[test]
+    fn a_registry_path_expands_the_variables_it_can() {
+        let path = std::env::var("PATH").unwrap_or_default();
+        assert_eq!(
+            split_registry_path(r"%PATH%\bin;;%PINRAIL_UNSET_VAR%\x; C:\tools "),
+            [
+                PathBuf::from(format!(r"{path}\bin")),
+                PathBuf::from(r"%PINRAIL_UNSET_VAR%\x"),
+                PathBuf::from(r"C:\tools"),
+            ]
+        );
+    }
 
     #[test]
     fn the_login_shell_is_the_variable_then_the_account_then_sh() {
@@ -465,6 +627,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn install_links_the_bundled_cli_and_replaces_an_old_link() {
         let tmp = tempfile::tempdir().unwrap();
         let cli = bundle(tmp.path());
@@ -511,6 +674,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn the_login_shells_answer_is_read_from_its_marked_lines() {
         let text = format!(
             "Welcome back!\n\n{PATH_MARK}/usr/bin:/home/me/.local/bin\n{COMMAND_MARK}/home/me/.local/bin/pinrail\n"
@@ -534,6 +698,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn status_says_whether_the_links_folder_is_on_the_path() {
         let tmp = tempfile::tempdir().unwrap();
         let cli = bundle(tmp.path());
@@ -625,6 +790,14 @@ mod tests {
     }
 
     #[test]
+    #[cfg(windows)]
+    fn windows_always_copies_the_cli() {
+        let sidecar = Path::new(r"C:\Program Files\Pinrail\pinrail-cli.exe");
+        assert_eq!(mode(sidecar, false), Mode::Copy);
+    }
+
+    #[test]
+    #[cfg(unix)]
     fn the_mode_follows_the_clis_name_and_the_appimage() {
         assert_eq!(
             mode(
