@@ -4,6 +4,19 @@ This plugin is released with the Pinrail app, which carries it among its
 official plugins. Each version names the release of the app that first
 carries it.
 
+## [1.2.0] - Unreleased
+
+### Changed
+
+- An item's note looks like the change map's field: one box with the
+  text and the microphone. Once the text wraps, the microphone moves to
+  a row under it, with the key that starts a new line.
+
+### Fixed
+
+- A long note grows to show all its text, rather than being cut off at
+  its first line.
+
 ## [1.1.0] - Pinrail 0.3.0
 
 ### Added
