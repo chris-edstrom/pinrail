@@ -19,6 +19,9 @@ change to the protocol is a new major and a new path.
   the pencil and the bin drawn by the stylesheet. In a comment marked
   `.pinrail-comment`, they show while the pointer is over it or the focus
   is in it.
+- A comment field, a `.pinrail-compose-input`, has spell checking,
+  autocorrection, automatic capitals and suggestions off. A field keeps an
+  attribute its view set itself, such as `spellcheck="true"`.
 
 ## [1.3.0]
 

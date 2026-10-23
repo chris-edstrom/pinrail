@@ -195,6 +195,8 @@ Call `Pinrail.fitField(textarea)` when the field is drawn and on each `input` ev
 
 The stylesheet draws the icons of `.pinrail-compose-send`, an arrow in a filled circle, and `.pinrail-compose-cancel`, a cross, so leave those buttons empty and give them an `aria-label`. A disabled add button is drawn greyed, so disable it while the field is empty if an empty comment means nothing. Another button in the field takes `.pinrail-compose-icon` and an icon of your own, from `Pinrail.icon()`. What the keys and the buttons do is up to your view, so handle Enter, Shift+Enter and Esc in the field yourself.
 
+The SDK turns off spell checking, autocorrection, automatic capitals and suggestions in a `.pinrail-compose-input`, so a comment reaches the agent as it was typed. To keep one of them in a field, set its attribute on the field yourself, such as `spellcheck="true"`.
+
 For a saved comment, put `.pinrail-comment-edit` and `.pinrail-comment-delete` buttons in a `.pinrail-comment-actions` group at the end of the comment's header. The stylesheet draws a pencil and a bin in them, so leave them empty and give each an `aria-label`. Mark the comment itself `.pinrail-comment`, and the two buttons show while the pointer is over it or the focus is in it. Let a click on the comment's text edit it as well.
 
 ```html

@@ -1112,6 +1112,17 @@
   const MIC =
     '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/></svg>';
 
+  /* A comment is written for a person to read as it was typed, so a comment
+     field, a .pinrail-compose-input, has spelling, autocorrection,
+     capitalisation and suggestions off. An attribute the view set itself
+     is left as it is. */
+  const PLAIN_TEXT = { spellcheck: "false", autocorrect: "off", autocapitalize: "off", autocomplete: "off" };
+  function plainText(doc) {
+    for (const field of doc.querySelectorAll(".pinrail-compose-input"))
+      for (const [name, value] of Object.entries(PLAIN_TEXT))
+        if (!field.hasAttribute(name)) field.setAttribute(name, value);
+  }
+
   /* Adds a microphone button to every text field marked data-pinrail-dictate
      while the app supports dictation. A click starts dictation into the
      field, and a second click stops it. The button is placed in the element
@@ -1180,6 +1191,7 @@
       win.queueMicrotask(() => {
         queued = false;
         decorate();
+        plainText(doc);
       });
     };
     new win.MutationObserver(later).observe(doc.documentElement, {

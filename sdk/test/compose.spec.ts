@@ -35,6 +35,7 @@ function composer(): string {
 <link rel="stylesheet" href="/sdk/v1/pinrail-plugin.css">
 <script src="/sdk/v1/pinrail-plugin.js"></script>
 ${field("comment")}
+<div class="pinrail-compose"><textarea class="pinrail-compose-input" id="checked" rows="1" spellcheck="true" aria-label="checked"></textarea></div>
 <script>
   for (const el of document.querySelectorAll("textarea")) {
     Pinrail.fitField(el);
@@ -102,4 +103,24 @@ test("a comment's edit and delete show while the pointer is over it, or the focu
   await f.locator("#comment").hover();
   await f.locator("#comment-edit").focus();
   await expect.poll(opacity).toBe("1");
+});
+
+test("a comment field has spelling and autocorrection off, unless its view says otherwise", async ({ page }) => {
+  const plugin = await mountPlugin(page, composer(), { review: reviewFrom({ title: "Compose", payload: {} }) });
+  const f = plugin.frame;
+  const attrs = (sel: string) =>
+    f
+      .locator(sel)
+      .evaluate((el) => ["spellcheck", "autocorrect", "autocapitalize", "autocomplete"].map((a) => el.getAttribute(a)));
+  await expect.poll(() => attrs("#comment")).toEqual(["false", "off", "off", "off"]);
+  // the view's own choice stays
+  await expect.poll(() => attrs("#checked")).toEqual(["true", "off", "off", "off"]);
+  // a field the view draws later gets the same
+  await f.locator("body").evaluate((body) => {
+    body.insertAdjacentHTML(
+      "beforeend",
+      '<div class="pinrail-compose"><textarea class="pinrail-compose-input" id="later" aria-label="later"></textarea></div>',
+    );
+  });
+  await expect.poll(() => attrs("#later")).toEqual(["false", "off", "off", "off"]);
 });
