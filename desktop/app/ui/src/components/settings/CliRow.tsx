@@ -18,6 +18,10 @@ export type CliStatus = {
   occupied_by: string | null;
   runs: string | null;
   dir_on_path: boolean | null;
+  /** something that went wrong after installing, such as the PATH not updating */
+  warning: string | null;
+  /** the app runs on Windows, where a copy is brought up to date at startup */
+  windows: boolean;
 };
 
 const invoke = <T,>(command: string) => import("@tauri-apps/api/core").then(({ invoke }) => invoke<T>(command));
@@ -104,6 +108,7 @@ export function CliRow({ open }: { open: boolean }) {
 
   let note: ReactNode = undefined;
   if (error) note = error;
+  else if (status.warning) note = `Installed, but ${status.warning}`;
   else if (status.outdated) note = `${link} is a copy from another version of Pinrail; installing replaces it`;
   else if (!status.installed && status.occupied_by)
     note = `${link} is already ${status.occupied_by}; installing replaces ${status.mode === "copy" ? "a link or an older copy" : "a link"}, never another file`;
@@ -120,7 +125,7 @@ export function CliRow({ open }: { open: boolean }) {
         A new terminal runs <span className="mono">{short(status.runs)}</span> first, which is not this one
       </span>
     );
-  else if (status.installed && status.mode === "copy")
+  else if (status.installed && status.mode === "copy" && !status.windows)
     note = "A copy does not follow the AppImage: after updating Pinrail, install again";
 
   if (status.mode === "package") return <SettingsRow label="Install the CLI" description={description} note={note} />;

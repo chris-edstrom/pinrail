@@ -75,6 +75,34 @@ pub struct Status {
     /// whether the install's folder is on a new terminal's PATH; none when
     /// the login shell could not be asked
     pub dir_on_path: Option<bool>,
+    /// something that went wrong after the CLI was installed, such as the
+    /// PATH not being updated
+    pub warning: Option<String>,
+    /// the app runs on Windows, where a copy is brought up to date when the
+    /// app starts
+    pub windows: bool,
+}
+
+/// What went wrong after the last install, kept so that the status check that
+/// follows still has it. Installing again replaces it.
+static LAST_WARNING: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// Records the last install's warning, or clears it.
+pub fn remember_warning(warning: Option<String>) {
+    if let Ok(mut last) = LAST_WARNING.lock() {
+        *last = warning;
+    }
+}
+
+/// `status` with the last install's warning, for as long as the folder is
+/// still not on the PATH.
+pub fn with_warning(mut status: Status) -> Status {
+    if status.dir_on_path != Some(true)
+        && let Ok(last) = LAST_WARNING.lock()
+    {
+        status.warning = last.clone();
+    }
+    status
 }
 
 /// The CLI shipped beside the running app, when there is one.
@@ -161,6 +189,8 @@ pub fn status(
         outdated,
         occupied_by,
         runs: shell.and_then(|s| s.command.clone()),
+        warning: None,
+        windows: cfg!(windows),
         dir_on_path: shell.map(|s| {
             dir.as_ref()
                 .is_some_and(|d| s.path.iter().any(|p| same_file(p, d)))
@@ -235,11 +265,46 @@ fn copy(bundled: &Path, link: &Path) -> Result<(), String> {
     let partial = link.with_file_name(format!(".{PROGRAM}.partial"));
     let result = std::fs::copy(bundled, &partial)
         .and_then(|_| executable(&partial))
-        .and_then(|_| std::fs::rename(&partial, link));
+        .and_then(|_| replace(&partial, link));
     if result.is_err() {
         let _ = std::fs::remove_file(&partial);
     }
-    result.map_err(|e| format!("cannot copy the CLI to {}: {e}", link.display()))
+    result.map_err(|e| {
+        let busy = if cfg!(windows) && e.kind() == std::io::ErrorKind::PermissionDenied {
+            "; close the pinrail commands that are running and try again"
+        } else {
+            ""
+        };
+        format!("cannot copy the CLI to {}: {e}{busy}", link.display())
+    })
+}
+
+/// Renames `partial` over `link`. Windows refuses that while `link` is a
+/// running program, but lets a running program be renamed, so the old file
+/// moves aside to `.pinrail.old` first, back again if the new one cannot take
+/// its place. The old file is deleted at once when nothing runs it, and by
+/// the next install otherwise.
+#[cfg(windows)]
+fn replace(partial: &Path, link: &Path) -> std::io::Result<()> {
+    match std::fs::rename(partial, link) {
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied && link.is_file() => {
+            let old = link.with_file_name(format!(".{PROGRAM}.old"));
+            let _ = std::fs::remove_file(&old);
+            std::fs::rename(link, &old)?;
+            if let Err(e) = std::fs::rename(partial, link) {
+                let _ = std::fs::rename(&old, link);
+                return Err(e);
+            }
+            let _ = std::fs::remove_file(&old);
+            Ok(())
+        }
+        result => result,
+    }
+}
+
+#[cfg(not(windows))]
+fn replace(partial: &Path, link: &Path) -> std::io::Result<()> {
+    std::fs::rename(partial, link)
 }
 
 #[cfg(unix)]
@@ -421,48 +486,62 @@ fn ask_shell(shell: &str) -> Option<ShellView> {
 }
 
 /// What a new terminal sees on Windows: the PATH the registry holds, the
-/// user's folders before the machine's, and the first `pinrail.exe` on it.
+/// machine's folders before the user's, and the first program called
+/// `pinrail` on it, tried with each extension of PATHEXT in turn.
 #[cfg(windows)]
 fn windows_view() -> ShellView {
-    let user = registry_path("HKCU\\Environment");
-    let machine =
-        registry_path("HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment");
-    let path = [user, machine]
+    let (machine, user) = registry_paths().unwrap_or_default();
+    let path = [machine, user]
         .into_iter()
         .flatten()
         .flat_map(|raw| split_registry_path(&raw))
         .collect::<Vec<_>>();
-    let command = path
-        .iter()
-        .map(|dir| dir.join(COMMAND))
-        .find(|p| p.is_file());
+    let extensions = std::env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".into());
+    let command = path.iter().find_map(|dir| {
+        extensions
+            .split(';')
+            .filter(|e| !e.is_empty())
+            .map(|e| dir.join(format!("{PROGRAM}{e}")))
+            .find(|p| p.is_file())
+    });
     ShellView { path, command }
 }
 
-/// The raw `Path` value under a registry key, with its `%VARIABLES%` unexpanded.
+/// The raw machine and user `Path` values, with their `%VARIABLES%`
+/// unexpanded. PowerShell prints them as UTF-8, where `reg query` would use
+/// the console's code page and garble a folder with accents in its name.
 #[cfg(windows)]
-fn registry_path(key: &str) -> Option<String> {
+fn registry_paths() -> Option<(Option<String>, Option<String>)> {
     use std::os::windows::process::CommandExt;
-    let out = Command::new("reg")
-        .args(["query", key, "/v", "Path"])
+    const SCRIPT: &str = r#"
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+$names = 'DoNotExpandEnvironmentNames'
+$u = (Get-Item 'HKCU:\Environment').GetValue('Path', '', $names)
+$m = (Get-Item 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment').GetValue('Path', '', $names)
+'M=' + $m
+'U=' + $u
+"#;
+    let out = Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", SCRIPT])
         .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
         .stdin(Stdio::null())
         .stderr(Stdio::null())
         .output()
         .ok()?;
-    parse_reg_query(&String::from_utf8_lossy(&out.stdout))
+    out.status
+        .success()
+        .then(|| parse_registry_paths(&String::from_utf8_lossy(&out.stdout)))
 }
 
-/// The data of the `Path` line of `reg query`: `    Path    REG_EXPAND_SZ    C:\a;C:\b`.
+/// The `M=` and `U=` lines of the script above.
 #[cfg_attr(not(windows), allow(dead_code))]
-fn parse_reg_query(text: &str) -> Option<String> {
-    text.lines().find_map(|line| {
-        let (name, rest) = line.trim().split_once(char::is_whitespace)?;
-        let rest = rest.trim_start();
-        let (kind, data) = rest.split_once(char::is_whitespace).unwrap_or((rest, ""));
-        let data = data.trim();
-        (name.eq_ignore_ascii_case("path") && kind.starts_with("REG_")).then(|| data.to_string())
-    })
+fn parse_registry_paths(text: &str) -> (Option<String>, Option<String>) {
+    let value = |tag: &str| {
+        text.lines()
+            .find_map(|line| line.strip_prefix(tag))
+            .map(|v| v.trim().to_string())
+    };
+    (value("M="), value("U="))
 }
 
 /// The folders of a registry PATH value, `%VARIABLES%` expanded from the
@@ -501,34 +580,49 @@ fn expand_variables(text: &str) -> String {
 }
 
 /// Puts `dir` at the end of the user's PATH, if it is not there, keeping the
-/// `%VARIABLES%` the value already has. PowerShell sets it, since writing the
-/// user's environment there also tells running programs, such as Explorer,
-/// so that a terminal opened next sees it. True when the PATH changed.
+/// `%VARIABLES%` the value already has, then tells running programs, such as
+/// Explorer, that the environment changed, so that a terminal opened next
+/// sees it. True when the PATH changed. A failure carries PowerShell's first
+/// line of complaint.
 #[cfg(windows)]
 pub fn add_to_user_path(dir: &Path) -> Result<bool, String> {
     use std::os::windows::process::CommandExt;
     const SCRIPT: &str = r#"
-$key = 'HKCU:\Environment'
-$raw = (Get-Item $key).GetValue('Path', '', 'DoNotExpandEnvironmentNames')
-$dir = $env:PINRAIL_ADD_DIR
-if ($raw -split ';' | Where-Object { $_.TrimEnd('\') -ieq $dir.TrimEnd('\') }) { exit 3 }
-$new = if ($raw) { $raw.TrimEnd(';') + ';' + $dir } else { $dir }
-Set-ItemProperty -Path $key -Name Path -Value $new -Type ExpandString
-[Environment]::SetEnvironmentVariable('PINRAIL_PATH_CHANGED', $null, 'User')
+$ErrorActionPreference = 'Stop'
+try {
+  $key = 'HKCU:\Environment'
+  $raw = (Get-Item $key).GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+  $dir = $env:PINRAIL_ADD_DIR
+  if ($raw -split ';' | Where-Object { [Environment]::ExpandEnvironmentVariables($_).TrimEnd('\') -ieq $dir.TrimEnd('\') }) { exit 3 }
+  $new = if ($raw) { $raw.TrimEnd(';') + ';' + $dir } else { $dir }
+  Set-ItemProperty -Path $key -Name Path -Value $new -Type ExpandString
+  Add-Type -Namespace Pinrail -Name Native -MemberDefinition '[DllImport("user32.dll", CharSet = CharSet.Auto)] public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr result);'
+  $result = [UIntPtr]::Zero
+  [void][Pinrail.Native]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$result)
+} catch {
+  [Console]::Error.WriteLine($_.Exception.Message)
+  exit 1
+}
 "#;
-    let status = Command::new("powershell")
+    let out = Command::new("powershell")
         .args(["-NoProfile", "-NonInteractive", "-Command", SCRIPT])
         .env("PINRAIL_ADD_DIR", dir)
         .creation_flags(0x0800_0000)
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
+        .output()
         .map_err(|e| format!("cannot update the PATH: {e}"))?;
-    match status.code() {
+    match out.status.code() {
         Some(0) => Ok(true),
         Some(3) => Ok(false),
-        _ => Err(format!("cannot add {} to the PATH", dir.display())),
+        _ => {
+            let why = String::from_utf8_lossy(&out.stderr);
+            let why = why.lines().next().unwrap_or("").trim();
+            Err(format!(
+                "cannot add {} to the PATH{}{why}",
+                dir.display(),
+                if why.is_empty() { "" } else { ": " }
+            ))
+        }
     }
 }
 
@@ -556,13 +650,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_registry_path_is_read_from_reg_querys_line() {
-        let out = "\r\nHKEY_CURRENT_USER\\Environment\r\n    Path    REG_EXPAND_SZ    %USERPROFILE%\\bin;C:\\tools\r\n\r\n";
+    fn the_registry_paths_are_read_from_the_scripts_tagged_lines() {
+        let out = "M=C:\\Windows;C:\\Windows\\System32\r\nU=%USERPROFILE%\\bin;C:\\Users\\José\\tools\r\n";
         assert_eq!(
-            parse_reg_query(out).as_deref(),
-            Some("%USERPROFILE%\\bin;C:\\tools")
+            parse_registry_paths(out),
+            (
+                Some("C:\\Windows;C:\\Windows\\System32".to_string()),
+                Some("%USERPROFILE%\\bin;C:\\Users\\José\\tools".to_string())
+            )
         );
-        assert_eq!(parse_reg_query("ERROR: not found"), None);
+        assert_eq!(parse_registry_paths("ERROR"), (None, None));
     }
 
     #[test]
