@@ -42,9 +42,9 @@ test("a code review closes with Escape when it has nothing of its own to cancel"
   // in the frame, the first Escape closes the open note and the second the panel
   await row(page, "Panel: Escape in a code review").click();
   await frame.locator(".card").first().getByRole("button", { name: "Add instruction" }).click();
-  await expect(frame.locator("textarea.note-ta")).toBeFocused();
+  await expect(frame.locator("textarea[data-note-ta]")).toBeFocused();
   await page.keyboard.press("Escape");
-  await expect(frame.locator("textarea.note-ta")).toHaveCount(0);
+  await expect(frame.locator("textarea[data-note-ta]")).toHaveCount(0);
   await expect(panel(page)).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(panel(page)).toHaveCount(0);
@@ -64,9 +64,9 @@ test("a view's key pressed in the app gives the view the keyboard, so c in a cod
   await expect(frame.locator(".card").first()).toBeVisible();
   // the app has the focus, as after a click in the list
   await page.locator("body").press("c");
-  await expect(frame.locator("textarea.note-ta")).toBeVisible();
+  await expect(frame.locator("textarea[data-note-ta]")).toBeVisible();
   await page.keyboard.type("shorter, please");
-  await expect(frame.locator("textarea.note-ta")).toHaveValue("shorter, please");
+  await expect(frame.locator("textarea[data-note-ta]")).toHaveValue("shorter, please");
 });
 
 test("a review opens beside the inbox, and closes with its button or Escape", async ({ page }) => {
