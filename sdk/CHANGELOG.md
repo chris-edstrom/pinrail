@@ -14,6 +14,11 @@ change to the protocol is a new major and a new path.
   button's cross. `Pinrail.fitField(textarea)` grows the text, and puts
   the keys and the buttons on a row under it once it wraps. The markup,
   the keys and what the buttons do stay the view's.
+- A saved comment's edit and delete buttons: `.pinrail-comment-edit` and
+  `.pinrail-comment-delete` in a `.pinrail-comment-actions` group, with
+  the pencil and the bin drawn by the stylesheet. In a comment marked
+  `.pinrail-comment`, they show while the pointer is over it or the focus
+  is in it.
 
 ## [1.3.0]
 

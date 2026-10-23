@@ -150,6 +150,7 @@ Check the view at about 390, 600 and 900 pixels wide. In the dev shell, the size
 | `.pinrail-item`, with `.pinrail-item-head`, `-id`, `-title`, `-body` and `-controls` | One thing the person says yes or no to. |
 | `.pinrail-btn`, with `.pinrail-btn-primary`, `-danger` or `-ghost` | Buttons. `aria-pressed="true"` marks the chosen one of a set. |
 | `.pinrail-field`, `.pinrail-note` | Inputs and text areas. |
+| `.pinrail-comment`, with `.pinrail-comment-actions`, `-edit` and `-delete` | A saved comment with edit and delete buttons. See [A comment field](#a-comment-field). |
 | `.pinrail-compose`, with `.pinrail-compose-input`, `-keys`, `-tools`, `-icon`, `-send` and `-cancel` | A field to write a comment or a note in, as the official plugins draw it. See [A comment field](#a-comment-field). |
 | `.pinrail-notice`, with `.pinrail-notice-success`, `-warning` or `-danger` | Something to tell the person. |
 | `.pinrail-tone`, with `.pinrail-tone-danger`, `-warning`, `-info`, `-success` or `-neutral` | A label in one of the five tones, such as a severity. |
@@ -193,6 +194,21 @@ Check the view at about 390, 600 and 900 pixels wide. In the dev shell, the size
 Call `Pinrail.fitField(textarea)` when the field is drawn and on each `input` event. It grows the text up to about eight lines, then lets it scroll. Once the text wraps or has a new line, it adds `.pinrail-compose-wide` to the box, which puts the text across the whole width and the keys and the buttons on a row under it.
 
 The stylesheet draws the icons of `.pinrail-compose-send`, an arrow in a filled circle, and `.pinrail-compose-cancel`, a cross, so leave those buttons empty and give them an `aria-label`. A disabled add button is drawn greyed, so disable it while the field is empty if an empty comment means nothing. Another button in the field takes `.pinrail-compose-icon` and an icon of your own, from `Pinrail.icon()`. What the keys and the buttons do is up to your view, so handle Enter, Shift+Enter and Esc in the field yourself.
+
+For a saved comment, put `.pinrail-comment-edit` and `.pinrail-comment-delete` buttons in a `.pinrail-comment-actions` group at the end of the comment's header. The stylesheet draws a pencil and a bin in them, so leave them empty and give each an `aria-label`. Mark the comment itself `.pinrail-comment`, and the two buttons show while the pointer is over it or the focus is in it. Let a click on the comment's text edit it as well.
+
+```html
+<div class="my-comment pinrail-comment">
+  <div class="my-comment-head">
+    <span>Your comment</span>
+    <span class="pinrail-comment-actions">
+      <button type="button" class="pinrail-comment-edit" aria-label="Edit the comment"></button>
+      <button type="button" class="pinrail-comment-delete" aria-label="Delete the comment"></button>
+    </span>
+  </div>
+  <p>Return the id of the existing ticket.</p>
+</div>
+```
 
 ## Themes
 

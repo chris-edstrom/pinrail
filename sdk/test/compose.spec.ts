@@ -20,6 +20,13 @@ function composer(): string {
     <button type="button" class="pinrail-compose-icon pinrail-compose-cancel" id="${id}-cancel" aria-label="Cancel"></button>
     <button type="button" class="pinrail-compose-icon pinrail-compose-send" id="${id}-send" aria-label="Add"></button>
   </span>
+</div>
+<div class="saved pinrail-comment" id="${id}-saved">
+  <span>Your comment</span>
+  <span class="pinrail-comment-actions">
+    <button type="button" class="pinrail-comment-edit" id="${id}-edit" aria-label="Edit"></button>
+    <button type="button" class="pinrail-comment-delete" id="${id}-delete" aria-label="Delete"></button>
+  </span>
 </div>`;
   fs.writeFileSync(
     path.join(dir, "view", "index.html"),
@@ -71,10 +78,10 @@ test("fitField grows the field and goes wide once the text wraps or has a new li
   await expect(f.locator("#comment-send")).toBeEnabled();
 });
 
-test("the stylesheet draws the add and cancel buttons' icons", async ({ page }) => {
+test("the stylesheet draws the icons of a field's buttons and of a comment's edit and delete", async ({ page }) => {
   const plugin = await mountPlugin(page, composer(), { review: reviewFrom({ title: "Compose", payload: {} }) });
   const f = plugin.frame;
-  for (const id of ["#comment-send", "#comment-cancel"]) {
+  for (const id of ["#comment-send", "#comment-cancel", "#comment-edit", "#comment-delete"]) {
     const icon = await f.locator(id).evaluate((el) => {
       const s = getComputedStyle(el, "::before");
       return { mask: s.webkitMaskImage || s.maskImage, width: parseFloat(s.width) };
@@ -82,4 +89,17 @@ test("the stylesheet draws the add and cancel buttons' icons", async ({ page }) 
     expect(icon.mask, `${id} has no icon`).toContain("data:image/svg+xml");
     expect(icon.width).toBeGreaterThan(8);
   }
+});
+
+test("a comment's edit and delete show while the pointer is over it, or the focus is in it", async ({ page }) => {
+  const plugin = await mountPlugin(page, composer(), { review: reviewFrom({ title: "Compose", payload: {} }) });
+  const f = plugin.frame;
+  const opacity = () => f.locator("#comment-edit").evaluate((el) => getComputedStyle(el.parentElement!).opacity);
+  await f.locator("#comment").hover();
+  await expect.poll(opacity).toBe("0");
+  await f.locator("#comment-saved").hover();
+  await expect.poll(opacity).toBe("1");
+  await f.locator("#comment").hover();
+  await f.locator("#comment-edit").focus();
+  await expect.poll(opacity).toBe("1");
 });

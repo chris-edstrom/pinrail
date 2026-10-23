@@ -725,6 +725,65 @@
     cursor: default;
   }
 
+  /* A saved comment's edit and delete buttons, at the right of its header:
+     a pencil and a bin, drawn by the stylesheet, so the buttons are left
+     empty. A view puts them in .pinrail-comment-actions, which takes the
+     header's remaining width and sits at its end. In a comment marked
+     .pinrail-comment, they show while the pointer is over it or the focus
+     is in it, so a list of comments stays calm to read. */
+  .pinrail-comment-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    flex: none;
+    margin-left: auto;
+  }
+  .pinrail-comment .pinrail-comment-actions {
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+  .pinrail-comment:hover .pinrail-comment-actions,
+  .pinrail-comment:focus-within .pinrail-comment-actions {
+    opacity: 1;
+  }
+  .pinrail-comment-edit,
+  .pinrail-comment-delete {
+    display: inline-grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: 5px;
+    background: none;
+    color: var(--pinrail-faint);
+    cursor: pointer;
+  }
+  .pinrail-comment-edit:hover,
+  .pinrail-comment-delete:hover {
+    background: var(--pinrail-bg-hover);
+    color: var(--pinrail-text);
+  }
+  .pinrail-comment-delete:hover {
+    color: var(--pinrail-danger);
+  }
+  .pinrail-comment-edit::before,
+  .pinrail-comment-delete::before {
+    content: "";
+    width: 13px;
+    height: 13px;
+    background-color: currentColor;
+    -webkit-mask: var(--pinrail-comment-icon) no-repeat center / contain;
+    mask: var(--pinrail-comment-icon) no-repeat center / contain;
+  }
+  /* Lucide's pencil and trash-2 */
+  .pinrail-comment-edit::before {
+    --pinrail-comment-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z'/%3E%3Cpath d='m15 5 4 4'/%3E%3C/svg%3E");
+  }
+  .pinrail-comment-delete::before {
+    --pinrail-comment-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 6h18'/%3E%3Cpath d='M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6'/%3E%3Cpath d='M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2'/%3E%3Cpath d='M10 11v6'/%3E%3Cpath d='M14 11v6'/%3E%3C/svg%3E");
+  }
+
   /* what was wrong, as the app said it */
   .pinrail-errors {
     font-family: var(--pinrail-mono);
