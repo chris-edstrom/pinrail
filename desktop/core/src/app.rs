@@ -250,22 +250,12 @@ fn private_dir(dir: &std::path::Path) -> std::io::Result<()> {
 mod tests {
     use super::*;
     use crate::plugins::carried;
+    use crate::plugins::{carried_version, later, next_major};
     use serde_json::json;
 
     /// The version of `list` the app bundles.
     fn carried_list() -> String {
-        let (_, files) = carried()
-            .into_iter()
-            .find(|(folder, _)| folder == "list")
-            .unwrap();
-        let (_, manifest) = files
-            .into_iter()
-            .find(|(path, _)| path == "manifest.json")
-            .unwrap();
-        serde_json::from_slice::<Value>(&manifest).unwrap()["version"]
-            .as_str()
-            .unwrap()
-            .to_owned()
+        carried_version("list")
     }
 
     /// The app's catalog with `list` at another version; `new_line` also
@@ -402,11 +392,12 @@ mod tests {
         assert_eq!(row(&app, "list")["update"], Value::Null);
         drop(app);
 
-        let app = Pinrail::open_with(config.clone(), vec![with_list("2.0.0", true)]).unwrap();
-        assert_eq!(row(&app, "list")["version"], "2.0.0");
+        let major = next_major(&carried_list());
+        let app = Pinrail::open_with(config.clone(), vec![with_list(&major, true)]).unwrap();
+        assert_eq!(row(&app, "list")["version"], major);
         assert_eq!(row(&app, "list")["update"], Value::Null);
-        let new = submit(&app, "With 2.0.0");
-        assert_eq!(new.plugin_version, "2.0.0");
+        let new = submit(&app, "With the next major release");
+        assert_eq!(new.plugin_version, major);
         assert_ne!(new.plugin_bundle, old.plugin_bundle);
 
         // each decided with its own release's schema
@@ -436,7 +427,7 @@ mod tests {
         drop(app);
 
         let app = Pinrail::open(config).unwrap();
-        assert_eq!(row(&app, "list")["version"], "2.0.0");
+        assert_eq!(row(&app, "list")["version"], major);
         assert_eq!(row(&app, "list")["update"], Value::Null);
     }
 
@@ -460,18 +451,19 @@ mod tests {
         }
         drop(app);
 
+        let highest = later(&carried_list(), 2);
         let catalogs = vec![
             Catalog::builtin(),
-            with_list("1.4.0", false),
-            with_list("1.2.0", false),
+            with_list(&highest, false),
+            with_list(&later(&carried_list(), 1), false),
         ];
         let app = Pinrail::open_with(config.clone(), catalogs).unwrap();
-        assert_eq!(row(&app, "list")["version"], "1.4.0");
+        assert_eq!(row(&app, "list")["version"], highest);
         assert_eq!(row(&app, "list")["update"], Value::Null);
         drop(app);
 
         let app = Pinrail::open_with(config, vec![]).unwrap();
-        assert_eq!(row(&app, "list")["version"], "1.4.0");
+        assert_eq!(row(&app, "list")["version"], highest);
         assert_eq!(row(&app, "list")["update"], Value::Null);
     }
 
@@ -480,15 +472,16 @@ mod tests {
     #[test]
     fn an_offered_version_is_installed_when_asked_for() {
         let dir = tempfile::tempdir().unwrap();
-        let catalogs = vec![Catalog::builtin(), with_list("1.4.0", false)];
+        let newer = later(&carried_list(), 1);
+        let catalogs = vec![Catalog::builtin(), with_list(&newer, false)];
         let app = Pinrail::open_with(Config::new(dir.path(), 0), catalogs).unwrap();
         let runtime = tokio::runtime::Runtime::new().unwrap();
         let at = |version: &str| {
             runtime.block_on(app.plugins().install_offered_at("list", Some(version)))
         };
         assert_eq!(at(&carried_list()).unwrap()["version"], carried_list());
-        assert_eq!(row(&app, "list")["update"], "1.4.0");
-        assert!(at("1.2.0").is_err());
-        assert_eq!(at("1.4.0").unwrap()["version"], "1.4.0");
+        assert_eq!(row(&app, "list")["update"], newer);
+        assert!(at(&later(&newer, 1)).is_err());
+        assert_eq!(at(&newer).unwrap()["version"], newer);
     }
 }

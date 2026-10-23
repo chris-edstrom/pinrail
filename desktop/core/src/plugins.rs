@@ -26,6 +26,8 @@ pub use summary::Declaration as SummaryDeclaration;
 
 #[cfg(test)]
 pub(crate) use catalog::carried;
+#[cfg(test)]
+pub(crate) use catalog::{carried_version, later, next_major};
 pub(crate) use install::tidy;
 pub(crate) use manifest::version_of;
 pub(crate) use registry::Registry;

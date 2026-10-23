@@ -238,6 +238,35 @@ pub(crate) fn carried() -> Vec<(String, Files)> {
         .collect()
 }
 
+/// The version of a plugin the app carries, by its folder. Tests offer
+/// releases relative to it, with [`later`] and [`next_major`], so that a
+/// plugin's release does not change what they check.
+#[cfg(test)]
+pub(crate) fn carried_version(folder: &str) -> String {
+    let (_, files) = carried().into_iter().find(|(f, _)| f == folder).unwrap();
+    let (_, manifest) = files
+        .into_iter()
+        .find(|(path, _)| path == "manifest.json")
+        .unwrap();
+    serde_json::from_slice::<serde_json::Value>(&manifest).unwrap()["version"]
+        .as_str()
+        .unwrap()
+        .to_owned()
+}
+
+/// The version `minors` minor releases after `version`.
+#[cfg(test)]
+pub(crate) fn later(version: &str, minors: u64) -> String {
+    let (major, minor, _) = pinrail_format::semver(version);
+    format!("{major}.{}.0", minor + minors)
+}
+
+/// The first version of the major release after `version`'s.
+#[cfg(test)]
+pub(crate) fn next_major(version: &str) -> String {
+    format!("{}.0.0", pinrail_format::semver(version).0 + 1)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -363,10 +392,15 @@ mod tests {
 
     #[test]
     fn the_highest_version_any_catalog_offers_wins() {
-        let catalogs = [Catalog::builtin(), list_at("1.2.0"), list_at("0.9.0")];
-        assert_eq!(best(&catalogs, "list").unwrap().version, "1.2.0");
-        assert_eq!(best(&catalogs, "forgeplane/list").unwrap().version, "1.2.0");
-        assert_eq!(best(&catalogs, "feedback").unwrap().version, "1.1.0");
+        let newer = later(&carried_version("list"), 1);
+        let older = "0.0.1";
+        let catalogs = [Catalog::builtin(), list_at(&newer), list_at(older)];
+        assert_eq!(best(&catalogs, "list").unwrap().version, newer);
+        assert_eq!(best(&catalogs, "forgeplane/list").unwrap().version, newer);
+        assert_eq!(
+            best(&catalogs, "feedback").unwrap().version,
+            carried_version("feedback")
+        );
         assert!(best(&catalogs, "acme/list").is_none());
         assert!(best(&catalogs, "nothing").is_none());
         // each plugin once, at its highest version, by name
@@ -377,9 +411,9 @@ mod tests {
         sorted.dedup();
         assert_eq!(names, sorted);
         let list = listed.iter().find(|e| e.name == "list").unwrap();
-        assert_eq!(list.version, "1.2.0");
-        assert_eq!(at(&catalogs, "list", "0.9.0").unwrap().version, "0.9.0");
-        assert!(at(&catalogs, "list", "1.1.5").is_none());
+        assert_eq!(list.version, newer);
+        assert_eq!(at(&catalogs, "list", older).unwrap().version, older);
+        assert!(at(&catalogs, "list", &later(&newer, 1)).is_none());
     }
 
     /// A folder of plugin folders, as tests give one, offers each in the
