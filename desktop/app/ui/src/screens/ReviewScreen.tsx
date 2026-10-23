@@ -99,6 +99,9 @@ export function ReviewView({ id, inPanel = false, linkTo = pageOf, onEnded, onCl
   const back = fromHistory ? { to: "/history", label: "History" } : { to: "/", label: "Inbox" };
   const [review, setReview] = useState<Review | null>(null);
   const [rounds, setRounds] = useState<Review[]>([]);
+  // the whole review this round revises, with its payload, for the view: the
+  // rounds list holds summaries only
+  const [revised, setRevised] = useState<Review | null>(null);
   // the other rounds still waiting that have never been opened: what is new
   const [unopened, setUnopened] = useState<Set<string>>(new Set());
   // The review opened: the plugin and its view's URL, resolved together for
@@ -154,6 +157,7 @@ export function ReviewView({ id, inPanel = false, linkTo = pageOf, onEnded, onCl
   const load = useCallback(async (): Promise<boolean> => {
     try {
       const [r, rs] = await Promise.all([api.getReview(id), api.rounds(id).catch(() => [] as Review[])]);
+      const before = r.revises ? await api.getReview(r.revises).catch(() => null) : null;
       const waiting = rs.filter((round) => round.id !== id && round.status === "pending");
       const opened = await Promise.all(
         waiting.map((round) =>
@@ -166,6 +170,7 @@ export function ReviewView({ id, inPanel = false, linkTo = pageOf, onEnded, onCl
       if (wanted.current !== id) return false;
       setReview(r);
       setRounds(rs);
+      setRevised(before);
       setUnopened(new Set(waiting.filter((_, i) => !opened[i]).map((round) => round.id)));
       setError(null);
       return true;
@@ -233,8 +238,9 @@ export function ReviewView({ id, inPanel = false, linkTo = pageOf, onEnded, onCl
 
   const previous = useMemo(() => {
     if (!review?.revises) return null;
+    if (revised?.id === review.revises) return revised;
     return rounds.find((r) => r.id === review.revises) ?? null;
-  }, [review, rounds]);
+  }, [review, rounds, revised]);
   const revisedBy = useMemo(() => rounds.find((r) => r.revises === review?.id) ?? null, [rounds, review]);
   // the newest round, when it is waiting and has never been opened
   const waiting = useMemo(() => {

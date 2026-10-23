@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { createReview, decide } from "./helpers";
+import { core, createReview, decide } from "./helpers";
 
 const payload = (title: string) => ({ groups: [{ title: "lib/acme/tickets.ex", items: [{ id: 1, title }] }] });
 
@@ -69,4 +69,37 @@ test("⌘[ goes back, even on a round that has an earlier one", async ({ page })
   // [ alone still moves to the earlier round
   await page.keyboard.press("BracketLeft");
   await expect(page).toHaveURL(new RegExp(`#/reviews/${first}$`));
+});
+
+test("a view gets the whole review its round revises, with its payload and its decision", async ({ page }) => {
+  const first = await submit(page.request, "Rounds: previous");
+  await decide(page.request, first, { decisions: [{ id: 1, action: "reject", note: "not this one" }], undecided: [] });
+  const second = await submit(page.request, "Rounds: previous", first);
+  await page.goto(`/#/reviews/${second}`);
+  // the list shows the previous round's verdict on the item, from its decision
+  await expect(page.frameLocator("#plugin-frame").locator(".previous")).toContainText("not this one");
+
+  // the markdown plugin compares the document with the previous round's, from its payload
+  const installed = await page.request.post(`${core}/api/v1/plugins/install`, { data: { id: "forgeplane/markdown" } });
+  expect(installed.status(), await installed.text()).toBe(200);
+  try {
+    const doc = (text: string) => ({ markdown: `# Retries\n\n${text}\n` });
+    const one = await createReview(page.request, {
+      title: "Rounds: a document",
+      plugin: "markdown",
+      payload: doc("Six attempts."),
+    });
+    const two = await createReview(page.request, {
+      title: "Rounds: a document",
+      plugin: "markdown",
+      payload: doc("Eight attempts."),
+      revises: one.id,
+    });
+    await page.goto(`/#/reviews/${two.id}`);
+    const view = page.frameLocator("#plugin-frame");
+    await view.locator('.modes [data-mode="changes"]').click();
+    await expect(view.locator(".diff-line.del")).toContainText("Six attempts.");
+  } finally {
+    await page.request.delete(`${core}/api/v1/plugins/markdown`);
+  }
 });

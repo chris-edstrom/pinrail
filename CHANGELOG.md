@@ -19,6 +19,12 @@ The `pinrail` command ships inside the app and carries the app's version.
   at their place, marked by whether their lines changed, so you can
   check how they were addressed without reading the document again.
 
+### Fixed
+
+- Fix plugin views that compare with the previous round, such as the
+  image plugin's comparison, in the app. They now receive the previous
+  round with its payload.
+
 ## [0.4.0]
 
 ### Added
