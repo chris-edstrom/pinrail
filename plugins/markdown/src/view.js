@@ -1,3 +1,4 @@
+import { diffLines, diffWordsWithSpace } from "diff";
 import MarkdownIt from "markdown-it";
 
 let mermaidLoading = null;
@@ -16,9 +17,13 @@ const $ = (id) => document.getElementById(id);
 
 let source = "";
 let lines = [];
+/** The document as the round this one revises had it, or null. */
+let previousSource = null;
 /** every heading: level, text, the line it starts on, its section's last line */
 let headings = [];
 let comments = [];
+/** The side panel's tab, when the previous round has comments: this round's or the previous one's. */
+let sideTab = "current";
 let mode = "rendered";
 /** what a new comment is about, while it is being written */
 let composing = null;
@@ -126,12 +131,24 @@ md.renderer.rules.fence = (tokens, i) => {
   return `<pre data-line-start="${start}" data-line-end="${end}"><code>${esc(token.content)}</code></pre>\n`;
 };
 
-/** The document's text: in the payload, or in the file it names. */
-async function documentOf(payload) {
+/** The document's text: in the payload, or in the file it names, of this
+ *  round or of the previous one. */
+async function documentOf(payload, round) {
   if (typeof payload.markdown === "string") return payload.markdown;
   const name = Pinrail.attachmentName(payload.file);
   if (!name) return "";
-  return new TextDecoder().decode(await plugin.attachment(name));
+  return new TextDecoder().decode(await plugin.attachment(name, round ? { round } : undefined));
+}
+
+/** The document of the round this one revises, when there is one. */
+async function previousDocument() {
+  const payload = plugin.previous && plugin.previous.payload;
+  if (!payload) return null;
+  try {
+    return String(await documentOf(payload, "previous")).replace(/\r\n?/g, "\n");
+  } catch {
+    return null;
+  }
 }
 
 async function load(review) {
@@ -151,8 +168,11 @@ async function load(review) {
     context.innerHTML = md.render(payload.context, { heading: 10000 });
   }
   headings = outlineOf(source);
+  previousSource = await previousDocument();
+  document.querySelector('.modes [data-mode="changes"]').hidden = previousSource === null;
   $("shell").dataset.readonly = String(plugin.readonly);
   renderDocument();
+  renderChanges();
   renderOutline();
   renderSide();
   setMode(mode, false);
@@ -262,6 +282,20 @@ $("outline-items").addEventListener("click", (event) => {
 
 /** Scrolls the panes on show to a line, and flashes what holds it. */
 function reveal(start, end) {
+  if (mode === "changes") {
+    let row = $("changes").querySelector(`[data-line="${start}"]`);
+    if (!row) {
+      const k = folds.findIndex((rows) => rows && rows.some((r) => r.line === start));
+      const button = k >= 0 && $("changes").querySelector(`[data-fold="${k}"]`);
+      if (button) openFold(button);
+      row = $("changes").querySelector(`[data-line="${start}"]`);
+    }
+    if (row) {
+      row.scrollIntoView({ block: "start", behavior: "smooth" });
+      flash(row);
+    }
+    return;
+  }
   if (mode !== "raw") {
     const block = blockAt(start);
     if (block) {
@@ -297,6 +331,180 @@ function blockAt(line) {
   return best;
 }
 
+// ------------------------------------------------------------------ changes
+
+/* The Changes mode: the document's source against the previous round's, a
+   line at a time. A removed line and the added line that takes its place
+   are compared word by word, and the words that changed are marked when the
+   two lines are mostly the same; a line rewritten or rewrapped is shown
+   whole, as marks on nearly every word would only add noise. Three
+   lines of context stay around each change; a longer stretch of unchanged
+   lines is folded, and its rows are drawn when it is opened. */
+const CONTEXT = 3;
+let folds = [];
+/** For each of the previous round's comments, by id, whether its lines changed. */
+let previousStatus = new Map();
+
+/** The previous round's comments, from its decision. */
+const previousComments = () => (plugin.previous && plugin.previous.decision?.data?.comments) || [];
+
+/* Where each of the previous round's comments goes in the diff: after the
+   change among its lines, or under its last line when none changed. Its
+   lines are counted in the previous version, which the diff's old line
+   numbers are. */
+function placeComments(rows) {
+  const placed = [];
+  for (const c of previousComments()) {
+    const t = c.target || {};
+    const hits = rows
+      .map((r, i) => (r.old && r.old >= t.start_line && r.old <= t.end_line ? i : -1))
+      .filter((i) => i >= 0);
+    if (!hits.length) continue;
+    const first = hits[0];
+    const last = hits[hits.length - 1];
+    let anchor = last;
+    // after the whole change its last line is in: the rest of the removed
+    // lines and the added ones
+    while (anchor + 1 < rows.length && rows[anchor].kind !== "same" && rows[anchor + 1].kind !== "same") anchor++;
+    placed.push({ comment: c, anchor, changed: rows.slice(first, anchor + 1).some((r) => r.kind !== "same") });
+  }
+  return placed;
+}
+
+const statusHtml = (changed) =>
+  `<span class="pinrail-tone pinrail-tone-${changed ? "success" : "warning"}">${changed ? "Changed" : "Unchanged"}</span>`;
+
+const previousCardHtml = ({ comment, changed }) =>
+  `<div class="diff-comment${kindOf(comment) === "question" ? " is-question" : ""}" data-prev-comment="${comment.id}">` +
+  `<div class="diff-comment-head"><span>Your comment in the previous round · ${KINDS[kindOf(comment)]}</span>${statusHtml(changed)}</div>` +
+  `<p>${esc(comment.body)}</p></div>`;
+
+const splitLines = (value) => (value.endsWith("\n") ? value.slice(0, -1) : value).split("\n");
+
+/** Whether two lines are mostly the same: at least half of the longer one is
+ *  in both. */
+function similar(words, before, after) {
+  const kept = words.filter((w) => !w.added && !w.removed).reduce((n, w) => n + w.value.trim().length, 0);
+  return kept >= Math.max(before.trim().length, after.trim().length) / 2;
+}
+
+/** The rows of the diff: `same`, `del` or `add`, with their line numbers and text as HTML. */
+function diffRows(before, after) {
+  const rows = [];
+  let o = 1;
+  let n = 1;
+  const parts = diffLines(before, after);
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (!part.added && !part.removed) {
+      for (const text of splitLines(part.value)) rows.push({ kind: "same", old: o++, line: n++, html: esc(text) });
+      continue;
+    }
+    if (part.removed && parts[i + 1] && parts[i + 1].added) {
+      const gone = splitLines(part.value);
+      const come = splitLines(parts[i + 1].value);
+      const dels = [];
+      const adds = [];
+      gone.forEach((text, k) => {
+        const words = k < come.length ? diffWordsWithSpace(text, come[k]) : null;
+        if (words && similar(words, text, come[k])) {
+          const side = (keep, mark) =>
+            words
+              .filter((w) => !w[keep])
+              .map((w) => (w[mark] ? `<mark>${esc(w.value)}</mark>` : esc(w.value)))
+              .join("");
+          dels.push({ kind: "del", old: o++, line: null, html: side("added", "removed") });
+          adds.push({ kind: "add", old: null, line: n++, html: side("removed", "added") });
+        } else {
+          dels.push({ kind: "del", old: o++, line: null, html: esc(text) });
+          if (k < come.length) adds.push({ kind: "add", old: null, line: n++, html: esc(come[k]) });
+        }
+      });
+      for (const text of come.slice(gone.length)) adds.push({ kind: "add", old: null, line: n++, html: esc(text) });
+      rows.push(...dels, ...adds);
+      i++;
+      continue;
+    }
+    for (const text of splitLines(part.value))
+      rows.push(
+        part.added
+          ? { kind: "add", old: null, line: n++, html: esc(text) }
+          : { kind: "del", old: o++, line: null, html: esc(text) },
+      );
+  }
+  return rows;
+}
+
+const rowHtml = (r) =>
+  `<div class="diff-line ${r.kind}"${r.line ? ` data-line="${r.line}"` : ""}>` +
+  `<span class="ln">${r.old ?? ""}</span><span class="ln">${r.line ?? ""}</span>` +
+  `<span class="sign">${r.kind === "add" ? "+" : r.kind === "del" ? "−" : ""}</span>` +
+  `<span class="src">${r.html || " "}</span></div>`;
+
+function renderChanges() {
+  const box = $("changes");
+  folds = [];
+  if (previousSource === null) {
+    box.innerHTML = "";
+    return;
+  }
+  const rows = diffRows(previousSource, source);
+  const placed = placeComments(rows);
+  previousStatus = new Map(placed.map((p) => [p.comment.id, p.changed]));
+  const changed = rows.map((r, i) => (r.kind === "same" ? -1 : i)).filter((i) => i >= 0);
+  if (!changed.length) {
+    box.innerHTML = `<div class="pinrail-empty">No changes since the previous round.</div>`;
+    return;
+  }
+  // a row stays on show within CONTEXT rows of a change, and so do the lines
+  // a previous comment sits under
+  const shown = rows.map(
+    (_, i) => changed.some((c) => Math.abs(c - i) <= CONTEXT) || placed.some((p) => i <= p.anchor && i >= p.anchor - 1),
+  );
+  const cardsAfter = (k) =>
+    placed
+      .filter((p) => p.anchor === k)
+      .map(previousCardHtml)
+      .join("");
+  let html = "";
+  let i = 0;
+  // the section a group of changes is in, from the document's headings
+  const section = (k) => {
+    const at = rows.slice(k).find((r) => r.line) || rows[k];
+    const name = at && at.line ? sectionOf(at.line) : "";
+    return name ? `<div class="diff-section">${esc(name)}</div>` : "";
+  };
+  while (i < rows.length) {
+    if (shown[i]) {
+      html += section(i);
+      while (i < rows.length && shown[i]) {
+        html += rowHtml(rows[i]) + cardsAfter(i);
+        i++;
+      }
+    } else {
+      const start = i;
+      while (i < rows.length && !shown[i]) i++;
+      folds.push(rows.slice(start, i));
+      const count = i - start;
+      html += `<button type="button" class="diff-fold" data-fold="${folds.length - 1}">${count} unchanged line${count === 1 ? "" : "s"}</button>`;
+    }
+  }
+  box.innerHTML = html;
+}
+
+/** Opens a folded stretch, drawing its rows where the fold was. */
+function openFold(button) {
+  const rows = folds[Number(button.dataset.fold)];
+  if (!rows) return;
+  button.insertAdjacentHTML("beforebegin", rows.map(rowHtml).join(""));
+  button.remove();
+}
+
+$("changes").addEventListener("click", (event) => {
+  const fold = event.target.closest(".diff-fold");
+  if (fold) openFold(fold);
+});
+
 // ------------------------------------------------------------------ modes
 
 document.querySelector(".modes").addEventListener("click", (event) => {
@@ -305,11 +513,12 @@ document.querySelector(".modes").addEventListener("click", (event) => {
 });
 
 function setMode(next, save) {
-  mode = next === "raw" ? "raw" : "rendered";
+  mode = next === "raw" || (next === "changes" && previousSource !== null) ? next : "rendered";
   for (const b of document.querySelectorAll(".modes [data-mode]"))
     b.setAttribute("aria-pressed", String(b.dataset.mode === mode));
-  $("rendered-pane").hidden = mode === "raw";
-  $("raw-pane").hidden = mode === "rendered";
+  $("rendered-pane").hidden = mode !== "rendered";
+  $("raw-pane").hidden = mode !== "raw";
+  $("changes-pane").hidden = mode !== "changes";
   hidePick();
   // an open dialog follows to the same place in the other pane
   if (!$("dialog").hidden) {
@@ -391,7 +600,8 @@ function hidePick() {
 }
 
 // the button stays where it was put, so a pane that scrolls takes it away
-for (const pane of ["rendered-pane", "raw-pane"]) $(pane).addEventListener("scroll", hidePick, { passive: true });
+for (const pane of ["rendered-pane", "raw-pane", "changes-pane"])
+  $(pane).addEventListener("scroll", hidePick, { passive: true });
 
 $("pick").addEventListener("mousedown", (event) => event.preventDefault());
 $("pick").addEventListener("click", () => {
@@ -470,6 +680,11 @@ function anchorFor(target) {
 function openDialog(anchor) {
   const target = dialogTarget();
   if (!target) return;
+  // comments are written in Raw from the Changes mode, against the document as it is
+  if (mode === "changes") {
+    setMode("raw", true);
+    anchor = anchorFor(target);
+  }
   const pane = $(mode === "raw" ? "raw-pane" : "rendered-pane");
   const dialog = $("dialog");
   if (dialog.parentElement !== pane) pane.appendChild(dialog);
@@ -579,6 +794,7 @@ $("dialog").addEventListener("keydown", (event) => {
 });
 
 function changed() {
+  sideTab = "current";
   saveDraft();
   renderSide();
   renderOutline();
@@ -653,30 +869,42 @@ function renderSide() {
   const readonly = plugin.readonly;
   const decided = plugin.review && plugin.review.decision ? plugin.review.decision.data : null;
   const shown = readonly ? (decided ? decided.comments || [] : []) : comments;
-  let html = "";
-  if (!shown.length) {
-    html += readonly
-      ? `<div class="pinrail-empty">No comments.</div>`
-      : `<div class="pinrail-empty">Hover a heading or a diagram and choose Comment, or select a passage in either pane.</div>`;
-  }
-  for (const c of shown) {
-    // edit and delete at the right of the header, and a click on the text edits it too
-    const actions = readonly
-      ? ""
-      : `<span class="pinrail-comment-actions"><button type="button" class="pinrail-comment-edit" data-edit="${c.id}" title="Edit the comment" aria-label="Edit the comment"></button><button type="button" class="pinrail-comment-delete" data-delete="${c.id}" title="Delete the comment" aria-label="Delete the comment"></button></span>`;
-    html += `<div class="card pinrail-comment${kindOf(c) === "question" ? " is-question" : ""}" data-comment="${c.id}">${where(c.target, c, actions)}<p class="body${readonly ? "" : " is-editable"}">${esc(c.body)}</p></div>`;
-  }
   const previous = plugin.previous && plugin.previous.decision ? plugin.previous.decision.data : null;
-  if (previous && previous.comments && previous.comments.length) {
+  const earlier = (previous && previous.comments) || [];
+  let html = "";
+  // this round's comments and the previous round's, in two tabs when there are both
+  if (earlier.length) {
+    const tab = (id, label, count) =>
+      `<button type="button" role="tab" data-side-tab="${id}" aria-selected="${sideTab === id}">${label}<span class="count">${count}</span></button>`;
     html +=
-      `<details class="previous"><summary>The previous round: ${previous.comments.length} comment${previous.comments.length === 1 ? "" : "s"}</summary>` +
-      previous.comments
+      `<div class="side-tabs" role="tablist" aria-label="Comments of">` +
+      tab("current", "This round", shown.length) +
+      tab("previous", "Previous round", earlier.length) +
+      `</div>`;
+  }
+  if (earlier.length && sideTab === "previous") {
+    html +=
+      `<div class="previous">` +
+      earlier
         .map(
           (c) =>
-            `<div class="card${kindOf(c) === "question" ? " is-question" : ""}">${where(c.target, c)}<p class="body">${esc(c.body)}</p></div>`,
+            `<div class="card${kindOf(c) === "question" ? " is-question" : ""}"${previousStatus.has(c.id) ? ` data-prev="${c.id}"` : ""}>${where(c.target, c, previousStatus.has(c.id) ? statusHtml(previousStatus.get(c.id)) : "")}<p class="body">${esc(c.body)}</p></div>`,
         )
         .join("") +
-      `</details>`;
+      `</div>`;
+  } else {
+    if (!shown.length) {
+      html += readonly
+        ? `<div class="pinrail-empty">No comments.</div>`
+        : `<div class="pinrail-empty">Hover a heading or a diagram and choose Comment, or select a passage in either pane.</div>`;
+    }
+    for (const c of shown) {
+      // edit and delete at the right of the header, and a click on the text edits it too
+      const actions = readonly
+        ? ""
+        : `<span class="pinrail-comment-actions"><button type="button" class="pinrail-comment-edit" data-edit="${c.id}" title="Edit the comment" aria-label="Edit the comment"></button><button type="button" class="pinrail-comment-delete" data-delete="${c.id}" title="Delete the comment" aria-label="Delete the comment"></button></span>`;
+      html += `<div class="card pinrail-comment${kindOf(c) === "question" ? " is-question" : ""}" data-comment="${c.id}">${where(c.target, c, actions)}<p class="body${readonly ? "" : " is-editable"}">${esc(c.body)}</p></div>`;
+    }
   }
   $("list").innerHTML = html;
   renderVerdict(readonly, decided);
@@ -697,6 +925,11 @@ function renderVerdict(readonly, decided) {
 
 $("list").addEventListener("click", (event) => {
   const t = event.target;
+  const tab = t.closest("[data-side-tab]");
+  if (tab) {
+    sideTab = tab.dataset.sideTab;
+    return renderSide();
+  }
   // close the drawer so that the document shows what the comment refers to
   if (drawer && (t.dataset.edit || (t.closest("[data-comment]") && !t.closest("button")))) openDrawer(null);
   if (t.dataset.edit) return editComment(Number(t.dataset.edit));
@@ -705,6 +938,17 @@ $("list").addEventListener("click", (event) => {
     if (editing === id) closeDialog();
     comments = comments.filter((c) => c.id !== id);
     return changed();
+  }
+  // a previous round's comment: to its place in the Changes view
+  const prev = t.closest("[data-prev]");
+  if (prev) {
+    setMode("changes", true);
+    const card = $("changes").querySelector(`[data-prev-comment="${prev.dataset.prev}"]`);
+    if (card) {
+      card.scrollIntoView({ block: "center", behavior: "smooth" });
+      flash(card);
+    }
+    return;
   }
   // a click on a comment's text shows what it is about and edits it
   const body = t.closest(".body.is-editable");

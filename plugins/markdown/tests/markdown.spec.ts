@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
-import { fixture, mountPlugin } from "pinrail-sdk/testing";
+import { fixture, mountPlugin, reviewFrom } from "pinrail-sdk/testing";
 
 // The view alone, under the harness: the retry policy document, with a
 // mermaid diagram, a table and a code block.
@@ -149,7 +149,7 @@ test("renders the document with its diagram, its outline and its raw source", as
   ]);
 
   // one pane at a time: the rendered document, or its raw source
-  await expect(f.locator(".modes [data-mode]")).toHaveText(["Rendered", "Raw"]);
+  await expect(f.locator(".modes [data-mode]:visible")).toHaveText(["Rendered", "Raw"]);
   await f.locator('[data-mode="raw"]').click();
   await expect(f.locator("#rendered-pane")).toBeHidden();
   await expect(f.locator('.raw-line[data-line="1"] .src')).toHaveText("# Retry policy for webhook deliveries");
@@ -452,4 +452,292 @@ test("without the app's dictation the comment dialog has no microphone", async (
   await plugin.frame.locator("#pick").click();
   await expect(plugin.frame.locator("#compose-body")).toBeVisible();
   await expect(plugin.frame.getByRole("button", { name: "Dictate" })).toHaveCount(0);
+});
+
+/** The fixture's document as an earlier round had it: six attempts, not
+ *  eight, and no line on logging a give-up. */
+const earlier = () =>
+  reviewFrom({
+    title: "Retry policy for webhook deliveries",
+    payload: {
+      markdown: source
+        .replace("at most eight times", "at most six times")
+        .replace("- Every give-up is logged with the last status.\n", ""),
+    },
+  });
+
+test("a revised document shows its changes since the previous round, with the unchanged lines folded", async ({
+  page,
+}) => {
+  const plugin = await mount(page, { previous: earlier() });
+  const f = plugin.frame;
+  await f.locator('.modes [data-mode="changes"]').click();
+  await expect(f.locator("#changes-pane")).toBeVisible();
+  await expect(f.locator("#rendered-pane")).toBeHidden();
+
+  // the changed line, old and new, with the changed word marked
+  await expect(f.locator(".diff-line.del")).toContainText("at most six times");
+  await expect(f.locator(".diff-line.add").first()).toContainText("at most eight times");
+  await expect(f.locator(".diff-line.del mark")).toHaveText("six");
+  await expect(f.locator(".diff-line.add mark").first()).toHaveText("eight");
+  // the added line, and where the change is
+  await expect(f.locator(".diff-line.add", { hasText: "Every give-up is logged" })).toHaveCount(1);
+  await expect(f.locator(".diff-section").first()).toContainText("Goals");
+
+  // what did not change is folded, and opens on a click
+  const fold = f.locator(".diff-fold").last();
+  await expect(fold).toContainText("unchanged lines");
+  const before = await f.locator(".diff-line.same").count();
+  await fold.click();
+  expect(await f.locator(".diff-line.same").count()).toBeGreaterThan(before);
+
+  // the mode is kept with the draft
+  await expect.poll(async () => (await plugin.lastDraft())?.mode).toBe("changes");
+});
+
+test("without a previous round there is no Changes mode", async ({ page }) => {
+  const plugin = await mount(page);
+  await expect(plugin.frame.locator('.modes [data-mode="changes"]')).toBeHidden();
+});
+
+test("in the Changes mode, a comment's place opens its fold, and editing it goes to Raw", async ({ page }) => {
+  const plugin = await mount(page, { previous: earlier() });
+  const f = plugin.frame;
+  // a comment on the last section, far from the changes
+  await f.locator(".rendered h2").last().hover();
+  await f.locator(".rendered h2 [data-comment-section]").last().click();
+  await f.locator("#compose-body").fill("Answer these first.");
+  await f.locator("#compose-body").press("Enter");
+  await f.locator('.modes [data-mode="changes"]').click();
+
+  const heading = f.locator("#changes .diff-line", { hasText: "## Open questions" });
+  await expect(heading).toHaveCount(0);
+  await f.locator(".card .where").click();
+  await expect(heading).toBeInViewport();
+
+  await f.locator(".card .body").click();
+  await expect(f.locator("#raw-pane")).toBeVisible();
+  await expect(f.locator("#raw-pane #dialog")).toBeVisible();
+  await expect(f.locator("#compose-body")).toHaveValue("Answer these first.");
+});
+
+test("in the Changes mode, words are marked only in a line that is mostly the same", async ({ page }) => {
+  // a paragraph rewritten and rewrapped: its lines no longer pair up
+  const rewritten = source.replace(
+    "The worker takes a delivery from the queue and posts it once. A failure",
+    "Each delivery is taken from the queue by a worker, which posts it a single time; on failure the delivery",
+  );
+  const plugin = await mount(page, {
+    review: reviewFrom({ title: "x", payload: { markdown: rewritten } }),
+    previous: earlier(),
+  });
+  const f = plugin.frame;
+  await f.locator('.modes [data-mode="changes"]').click();
+  // the rewritten line is shown whole, with nothing marked in it
+  const added = f.locator(".diff-line.add", { hasText: "Each delivery is taken" });
+  await expect(added).toHaveCount(1);
+  await expect(added.locator("mark")).toHaveCount(0);
+  // a small change in a line still has its word marked
+  await expect(f.locator(".diff-line.add mark").first()).toHaveText("eight");
+});
+
+test("in the Changes mode, the previous round's comments show at their place, changed or not", async ({ page }) => {
+  const before: string = earlier().payload.markdown;
+  const at = (start: string) => before.split("\n").findIndex((l) => l.startsWith(start)) + 1;
+  const six = at("- A delivery is tried at most six times");
+  const open = at("## Open questions");
+  const previous = {
+    ...earlier(),
+    status: "decided",
+    decision: {
+      data: {
+        verdict: "request_changes",
+        comments: [
+          {
+            id: 1,
+            kind: "change",
+            target: { kind: "text", start_line: six, end_line: six, quote: "six times" },
+            body: "Make it eight.",
+          },
+          {
+            id: 2,
+            kind: "change",
+            target: { kind: "section", start_line: open, end_line: before.split("\n").length },
+            body: "Answer these first.",
+          },
+        ],
+      },
+    },
+  };
+  const plugin = await mount(page, { previous });
+  const f = plugin.frame;
+  await f.locator('.modes [data-mode="changes"]').click();
+
+  // the comment on a changed line sits after the change, marked as changed
+  const changed = f.locator('#changes [data-prev-comment="1"]');
+  await expect(changed).toContainText("Make it eight.");
+  await expect(changed).toContainText("Changed");
+  const after = await changed.evaluate((el) => el.previousElementSibling?.textContent ?? "");
+  expect(after).toContain("Every give-up is logged");
+
+  // the one on lines that did not change is shown with them, and says so
+  const unchanged = f.locator('#changes [data-prev-comment="2"]');
+  await expect(unchanged).toContainText("Answer these first.");
+  await expect(unchanged).toContainText("Unchanged");
+
+  // the side panel's list says the same, and a click goes to the comment's place
+  await f.getByRole("tab", { name: /Previous round/ }).click();
+  const side = f.locator(".previous .card");
+  await expect(side.nth(0)).toContainText("Changed");
+  await expect(side.nth(1)).toContainText("Unchanged");
+  await f.locator('.modes [data-mode="rendered"]').click();
+  await side.nth(1).click();
+  await expect(f.locator("#changes-pane")).toBeVisible();
+  await expect(unchanged).toBeInViewport();
+});
+
+test("a previous comment on the first of several changed lines sits after the whole change", async ({ page }) => {
+  const before: string = earlier().payload.markdown;
+  const first = before.split("\n").findIndex((l) => l.startsWith("The worker takes a delivery")) + 1;
+  // both lines of the paragraph rewritten
+  const now = source
+    .replace(
+      "The worker takes a delivery from the queue and posts it once. A failure",
+      "A worker posts each delivery once.",
+    )
+    .replace(
+      "re-enqueues the delivery with a `run_at` in the future instead of sleeping.",
+      "On a failure it is queued again for later.",
+    );
+  const previous = {
+    ...earlier(),
+    status: "decided",
+    decision: {
+      data: {
+        verdict: "request_changes",
+        comments: [
+          {
+            id: 1,
+            kind: "change",
+            target: { kind: "text", start_line: first, end_line: first, quote: "The worker" },
+            body: "Shorter.",
+          },
+        ],
+      },
+    },
+  };
+  const plugin = await mount(page, { review: reviewFrom({ title: "x", payload: { markdown: now } }), previous });
+  const f = plugin.frame;
+  await f.locator('.modes [data-mode="changes"]').click();
+  const card = f.locator('#changes [data-prev-comment="1"]');
+  const before_ = await card.evaluate((el) => el.previousElementSibling?.textContent ?? "");
+  expect(before_).toContain("On a failure it is queued again for later.");
+});
+
+test("this round's and the previous round's comments are in tabs, and every card has a straight bar", async ({
+  page,
+}) => {
+  const before: string = earlier().payload.markdown;
+  const six = before.split("\n").findIndex((l) => l.startsWith("- A delivery is tried at most six times")) + 1;
+  const previous = {
+    ...earlier(),
+    status: "decided",
+    decision: {
+      data: {
+        verdict: "request_changes",
+        comments: [
+          {
+            id: 1,
+            kind: "change",
+            target: { kind: "text", start_line: six, end_line: six, quote: "six" },
+            body: "Make it eight.",
+          },
+          {
+            id: 2,
+            kind: "question",
+            target: { kind: "text", start_line: six, end_line: six, quote: "six" },
+            body: "Why six?",
+          },
+        ],
+      },
+    },
+  };
+  const plugin = await mount(page, { previous });
+  const f = plugin.frame;
+  const current = f.getByRole("tab", { name: /This round/ });
+  const last = f.getByRole("tab", { name: /Previous round/ });
+  await expect(current).toHaveAttribute("aria-selected", "true");
+  await expect(current).toContainText("0");
+  await expect(last).toContainText("2");
+  await expect(f.locator(".previous .card")).toHaveCount(0);
+
+  await last.click();
+  await expect(f.locator(".previous .card")).toHaveCount(2);
+  // a change and a question have the same shape: a bar on a square left edge
+  for (const card of [f.locator(".previous .card").nth(0), f.locator(".previous .card").nth(1)]) {
+    const shape = await card.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return [s.borderLeftWidth, s.borderTopLeftRadius, s.borderBottomLeftRadius];
+    });
+    expect(shape).toEqual(["3px", "0px", "0px"]);
+  }
+  // nothing makes the list scroll sideways
+  const [scroll, client] = await f.locator("#list").evaluate((el) => [el.scrollWidth, el.clientWidth]);
+  expect(scroll).toBeLessThanOrEqual(client);
+
+  // a new comment brings this round's tab back
+  await f.locator(".rendered h2").first().hover();
+  await f.locator(".rendered h2 [data-comment-section]").first().click();
+  await f.locator("#compose-body").fill("Name the queue.");
+  await f.locator("#compose-body").press("Enter");
+  await expect(current).toHaveAttribute("aria-selected", "true");
+  await expect(current).toContainText("1");
+  await expect(f.locator(".card", { hasText: "Name the queue." })).toBeVisible();
+});
+
+test("the comment tabs stay at the top while the list scrolls", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 500 });
+  const before: string = earlier().payload.markdown;
+  const comments = Array.from({ length: 12 }, (_, i) => ({
+    id: i + 1,
+    kind: "change",
+    target: { kind: "text", start_line: 3, end_line: 3, quote: "How" },
+    body: `Comment ${i + 1}: something to change in this paragraph.`,
+  }));
+  const previous = { ...earlier(), status: "decided", decision: { data: { verdict: "request_changes", comments } } };
+  expect(before.length).toBeGreaterThan(0);
+  const plugin = await mount(page, { previous });
+  const f = plugin.frame;
+  await f.getByRole("tab", { name: /Previous round/ }).click();
+  const tabs = f.locator(".side-tabs");
+  const top = (await tabs.boundingBox())!.y;
+  await f.locator("#list").evaluate((el) => el.scrollTo(0, el.scrollHeight));
+  await expect.poll(async () => (await tabs.boundingBox())!.y).toBe(top);
+  await expect(tabs).toBeInViewport();
+});
+
+test("a long quote shows two whole lines and an ellipsis", async ({ page }) => {
+  const quote = "How the delivery worker retries a webhook that fails, and when it gives up. ".repeat(4);
+  const previous = {
+    ...earlier(),
+    status: "decided",
+    decision: {
+      data: {
+        verdict: "request_changes",
+        comments: [
+          { id: 1, kind: "change", target: { kind: "text", start_line: 3, end_line: 3, quote }, body: "Shorter." },
+        ],
+      },
+    },
+  };
+  const plugin = await mount(page, { previous });
+  const f = plugin.frame;
+  await f.getByRole("tab", { name: /Previous round/ }).click();
+  const q = f.locator(".previous .card .quote");
+  const [clamp, height, line] = await q.evaluate((el) => {
+    const s = getComputedStyle(el);
+    return [s.webkitLineClamp, el.getBoundingClientRect().height, parseFloat(s.lineHeight)];
+  });
+  expect(clamp).toBe("2");
+  expect(Math.round(height / line)).toBe(2);
 });

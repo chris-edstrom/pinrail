@@ -9,6 +9,16 @@ wait for a release, and takes the version's name when it is tagged.
 
 The `pinrail` command ships inside the app and carries the app's version.
 
+## [Unreleased]
+
+### Added
+
+- The markdown plugin has a Changes view for a new version of a document.
+  It shows what changed since the previous round, with the changed words
+  marked and the unchanged lines folded. Your previous comments appear
+  at their place, marked by whether their lines changed, so you can
+  check how they were addressed without reading the document again.
+
 ## [0.4.0]
 
 ### Added

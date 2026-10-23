@@ -34,6 +34,7 @@ pinrail plugins install markdown
 - **The agent's context** above the document, when it sends some, such as what changed since the last round.
 - **Comments** on a section, from its heading, on a diagram, or on a passage you select in either view. Each comment is a **Change** or a **Question**.
 - **The previous round's comments**, when the agent sends a new version.
+- **The changes since the previous round**, in the **Changes** view, when the agent sends a new version with `--revises`. It shows the document's source line by line against the previous version, with the changed words marked and the section above each change. Unchanged lines are folded, and a click opens them. Your comments from the previous round appear at their place: after the change they asked for, marked **Changed**, or under their lines, marked **Unchanged**, when those lines are as they were. In the list of the previous round's comments, a click on one goes to its place.
 
 There is no verdict to choose. Handing over with no comments approves the document. With any change, it asks for changes. With questions alone, it asks the agent to explain without changing the document.
 

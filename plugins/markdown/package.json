@@ -8,6 +8,7 @@
     "watch": "vite build --watch"
   },
   "dependencies": {
+    "diff": "^9.0.0",
     "markdown-it": "^14",
     "mermaid": "^11"
   },

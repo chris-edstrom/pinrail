@@ -6,6 +6,14 @@ carries it.
 
 ## [1.2.0] - Unreleased
 
+### Added
+
+- A Changes view, for a new version of a document: the source line by
+  line against the previous round's, with the changed words marked, the
+  section above each change, and the unchanged lines folded. The previous
+  round's comments appear at their place, each marked Changed or
+  Unchanged by whether its lines changed.
+
 ### Changed
 
 - A saved comment has edit and delete buttons at the right of its header,
