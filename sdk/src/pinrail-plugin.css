@@ -587,6 +587,144 @@
     color: var(--pinrail-danger);
   }
 
+  /* The field to write a comment or a note in: one box with the text and
+     the buttons at its end. A view writes the markup, and anything it
+     needs inside, and Pinrail.fitField sizes it: once the text wraps or
+     has a new line, the box is .pinrail-compose-wide, and the text takes
+     the whole width and the buttons a row under it, with the keys on
+     their left. */
+  .pinrail-compose {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 4px;
+    box-sizing: border-box;
+    padding: 3px 4px;
+    border: 1px solid var(--pinrail-border-strong);
+    border-radius: 6px;
+    background: var(--pinrail-bg);
+  }
+  /* focused, a stronger grey border rather than the accent */
+  .pinrail-compose:focus-within {
+    border-color: var(--pinrail-faint);
+  }
+  .pinrail-compose-wide {
+    padding: 4px 4px 3px;
+  }
+  .pinrail-compose-input {
+    flex: 1;
+    min-width: 0;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 3px 8px;
+    border: 0;
+    background: none;
+    color: var(--pinrail-text);
+    font: 12.5px var(--pinrail-sans);
+    line-height: 18px;
+    resize: none;
+    overflow: hidden;
+  }
+  .pinrail-compose-input:focus {
+    outline: none;
+  }
+  .pinrail-compose-wide .pinrail-compose-input {
+    flex-basis: 100%;
+  }
+  /* the keys, on the left of the buttons' row of a wide field; no width of
+     their own, so they never widen the field */
+  .pinrail-compose-keys {
+    display: none;
+    flex: 1 1 0;
+    width: 0;
+    min-width: 0;
+    padding-left: 8px;
+    color: var(--pinrail-faint);
+    font: 11px var(--pinrail-sans);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .pinrail-compose-wide .pinrail-compose-keys {
+    display: block;
+  }
+  .pinrail-compose-tools {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: none;
+  }
+  .pinrail-compose-wide .pinrail-compose-tools {
+    margin-left: auto;
+  }
+  /* the microphone the SDK adds to a slot among the buttons, at their size;
+     as a flex box the slot adds no line height */
+  .pinrail-compose-tools [data-pinrail-dictate-for] {
+    display: flex;
+    align-items: center;
+  }
+  .pinrail-compose-tools .pinrail-dictate {
+    width: 24px;
+    height: 24px;
+    border-radius: 5px;
+  }
+  /* a button in the field, drawn as the microphone is */
+  .pinrail-compose-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: 5px;
+    background: none;
+    color: var(--pinrail-faint);
+    cursor: pointer;
+  }
+  .pinrail-compose-icon:hover:not(:disabled) {
+    background: var(--pinrail-bg-hover);
+    color: var(--pinrail-text);
+  }
+  /* the add button: an arrow in a filled circle, in the accent colour; a
+     view that disables it while the field is empty gets it greyed */
+  .pinrail-compose-send,
+  .pinrail-compose-send:hover:not(:disabled) {
+    width: 22px;
+    height: 22px;
+    margin: 1px;
+    border-radius: 50%;
+    background: var(--pinrail-accent);
+    color: var(--pinrail-accent-fg, #fff);
+  }
+  .pinrail-compose-send:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--pinrail-accent) 85%, var(--pinrail-text));
+  }
+  /* the add and cancel buttons' icons, Lucide's arrow-up and x, drawn by
+     the stylesheet, so the buttons are left empty and a view needs no icon
+     files for them */
+  .pinrail-compose-send::before,
+  .pinrail-compose-cancel::before {
+    content: "";
+    width: 15px;
+    height: 15px;
+    background-color: currentColor;
+    -webkit-mask: var(--pinrail-compose-icon) no-repeat center / contain;
+    mask: var(--pinrail-compose-icon) no-repeat center / contain;
+  }
+  .pinrail-compose-send::before {
+    width: 13px;
+    height: 13px;
+    --pinrail-compose-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 7-7 7 7'/%3E%3Cpath d='M12 19V5'/%3E%3C/svg%3E");
+  }
+  .pinrail-compose-cancel::before {
+    --pinrail-compose-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E");
+  }
+  .pinrail-compose-send:disabled {
+    background: var(--pinrail-bg-hover);
+    color: var(--pinrail-faint);
+    cursor: default;
+  }
+
   /* what was wrong, as the app said it */
   .pinrail-errors {
     font-family: var(--pinrail-mono);

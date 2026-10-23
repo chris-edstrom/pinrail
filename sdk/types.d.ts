@@ -364,6 +364,9 @@ export type PinrailSdk = {
   layout(options?: LayoutOptions): Layout;
   /** the layout's confirmation bar, for a view with a layout of its own */
   confirmationBar(options?: { document?: Document }): ConfirmationBar;
+  /** sizes a comment field's textarea in a `.pinrail-compose`: grows it with its text, and makes the
+   *  box `.pinrail-compose-wide` once the text wraps or has a new line */
+  fitField(textarea: HTMLTextAreaElement): void;
   /** the plugin's own `icons/<name>.svg`, beside the view, as markup that takes the text's colour */
   icon(name: string, opts?: { label?: string; size?: number | string; class?: string }): string;
   escape(text: string): string;

@@ -287,6 +287,14 @@ the view follows the app's theme.
   chosen one with `aria-pressed="true"`.
 - Fields and notices: `.pinrail-field`, `.pinrail-note`, and
   `.pinrail-notice` with `-success`, `-warning` or `-danger`.
+- A comment field: `.pinrail-compose`, a box with a
+  `.pinrail-compose-input` textarea, `.pinrail-compose-keys` and the buttons
+  in `.pinrail-compose-tools`, each a `.pinrail-compose-icon`. The
+  stylesheet draws the icons of the add button, `.pinrail-compose-send`, and
+  of `.pinrail-compose-cancel`, so leave them empty. Call
+  `Pinrail.fitField(textarea)` when it is drawn and on each input; the keys,
+  the buttons' actions and whether the add button is disabled are your
+  view's.
 - Text: `.pinrail-tone` with a tone, such as `.pinrail-tone-warning`, and
   `.pinrail-chip`, `.pinrail-eyebrow`, `.pinrail-dim`, `.pinrail-faint`,
   `.pinrail-empty` and `.pinrail-errors`.

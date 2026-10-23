@@ -385,6 +385,7 @@ test("window.Pinrail has the members a view uses, and no others", () => {
     "confirmationBar",
     "connect",
     "escape",
+    "fitField",
     "highlight",
     "highlightLines",
     "icon",

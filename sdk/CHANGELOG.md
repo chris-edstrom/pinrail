@@ -4,6 +4,17 @@ The package's version is the SDK's, and its major is the protocol's:
 `1.x` speaks protocol 1, served by the app at `/sdk/v1`. A breaking
 change to the protocol is a new major and a new path.
 
+## [Unreleased]
+
+### Added
+
+- A comment field in the stylesheet: `.pinrail-compose`, one box with the
+  text and the buttons at its end, as the official plugins draw a comment
+  or a note. The stylesheet draws the add button's arrow and the cancel
+  button's cross. `Pinrail.fitField(textarea)` grows the text, and puts
+  the keys and the buttons on a row under it once it wraps. The markup,
+  the keys and what the buttons do stay the view's.
+
 ## [1.3.0]
 
 ### Added

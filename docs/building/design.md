@@ -150,6 +150,7 @@ Check the view at about 390, 600 and 900 pixels wide. In the dev shell, the size
 | `.pinrail-item`, with `.pinrail-item-head`, `-id`, `-title`, `-body` and `-controls` | One thing the person says yes or no to. |
 | `.pinrail-btn`, with `.pinrail-btn-primary`, `-danger` or `-ghost` | Buttons. `aria-pressed="true"` marks the chosen one of a set. |
 | `.pinrail-field`, `.pinrail-note` | Inputs and text areas. |
+| `.pinrail-compose`, with `.pinrail-compose-input`, `-keys`, `-tools`, `-icon`, `-send` and `-cancel` | A field to write a comment or a note in, as the official plugins draw it. See [A comment field](#a-comment-field). |
 | `.pinrail-notice`, with `.pinrail-notice-success`, `-warning` or `-danger` | Something to tell the person. |
 | `.pinrail-tone`, with `.pinrail-tone-danger`, `-warning`, `-info`, `-success` or `-neutral` | A label in one of the five tones, such as a severity. |
 | `.pinrail-chip` | A small monospace chip: a branch, a line number, an id. |
@@ -171,6 +172,27 @@ Check the view at about 390, 600 and 900 pixels wide. In the dev shell, the size
   </div>
 </div>
 ```
+
+### A comment field
+
+`.pinrail-compose` is one box with the text and the buttons at its end, as the official plugins draw a comment or a note. You write the markup, and you can put anything you need among the buttons, such as a choice between a change and a question:
+
+```html
+<div class="pinrail-compose">
+  <textarea class="pinrail-compose-input" id="comment" rows="1" data-pinrail-dictate
+            placeholder="What should change here?" aria-label="Comment"></textarea>
+  <span class="pinrail-compose-keys">Enter to add · Shift+Enter for a new line</span>
+  <span class="pinrail-compose-tools">
+    <span data-pinrail-dictate-for="comment"></span>
+    <button type="button" class="pinrail-compose-icon pinrail-compose-cancel" data-cancel aria-label="Cancel"></button>
+    <button type="button" class="pinrail-compose-icon pinrail-compose-send" data-add aria-label="Add"></button>
+  </span>
+</div>
+```
+
+Call `Pinrail.fitField(textarea)` when the field is drawn and on each `input` event. It grows the text up to about eight lines, then lets it scroll. Once the text wraps or has a new line, it adds `.pinrail-compose-wide` to the box, which puts the text across the whole width and the keys and the buttons on a row under it.
+
+The stylesheet draws the icons of `.pinrail-compose-send`, an arrow in a filled circle, and `.pinrail-compose-cancel`, a cross, so leave those buttons empty and give them an `aria-label`. A disabled add button is drawn greyed, so disable it while the field is empty if an empty comment means nothing. Another button in the field takes `.pinrail-compose-icon` and an icon of your own, from `Pinrail.icon()`. What the keys and the buttons do is up to your view, so handle Enter, Shift+Enter and Esc in the field yourself.
 
 ## Themes
 

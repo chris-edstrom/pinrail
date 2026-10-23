@@ -743,6 +743,31 @@
     return `<span class="pinrail-icon${extra}" data-icon="${safe}" style="--pinrail-icon:url(&quot;${escape(url)}&quot;);${size}"${described}></span>`;
   }
 
+  /* Sizes a comment field's text, a textarea in a .pinrail-compose: it grows
+     with the text up to about eight lines, then scrolls, and the box is
+     .pinrail-compose-wide once the text wraps or has a new line. A view
+     calls it when the field is drawn and on each input; everything else in
+     the field, its buttons among it, is the view's. */
+  const FIELD_MAX = 150;
+  function fitField(el) {
+    if (!el || typeof el.closest !== "function") return;
+    const box = el.closest(".pinrail-compose");
+    if (box) {
+      if (!el.value) box.classList.remove("pinrail-compose-wide");
+      else if (!box.classList.contains("pinrail-compose-wide")) {
+        el.style.height = "auto";
+        const style = getComputedStyle(el);
+        const oneLine =
+          (parseFloat(style.lineHeight) || 18) + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+        // the next measure, below, is at the full width
+        if (el.value.includes("\n") || el.scrollHeight > oneLine * 1.4) box.classList.add("pinrail-compose-wide");
+      }
+    }
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, FIELD_MAX)}px`;
+    el.style.overflowY = el.scrollHeight > FIELD_MAX ? "auto" : "hidden";
+  }
+
   /* Find in the view, for the app's find bar. The text the view shows is
      searched, ignoring case, as one string per block, so a match may cross
      inline elements such as a link or a highlighted token. Text that is
@@ -1174,6 +1199,7 @@
     connect,
     layout,
     confirmationBar,
+    fitField,
     icon,
     escape,
     markdown,
