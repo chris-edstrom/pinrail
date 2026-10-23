@@ -4,6 +4,17 @@ This plugin is released with the Pinrail app, which carries it among its
 official plugins. Each version names the release of the app that first
 carries it.
 
+## [1.2.0] - Unreleased
+
+### Changed
+
+- The fields for an image's note and for a comment on an area look like
+  the change map's: one box with the text, the microphone and an add
+  button at its end. Once the text wraps, the buttons move to a row
+  under it, with the keys that add the text and start a new line.
+- Enter saves an image's note, as it adds a comment on an area, and
+  Shift+Enter starts a new line.
+
 ## [1.1.0] - Pinrail 0.3.0
 
 ### Added

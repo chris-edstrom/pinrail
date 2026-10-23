@@ -445,7 +445,7 @@ test("an image's note and a region's comment can be dictated", async ({ page }) 
   await ready(plugin);
 
   await f.getByRole("button", { name: "Add a note" }).click();
-  await f.locator(".dictate-mic").getByRole("button", { name: "Dictate" }).click();
+  await f.locator(".compose:has(#note)").getByRole("button", { name: "Dictate" }).click();
   await plugin.say("warmer");
   await plugin.say("warmer light overall");
   await expect(f.locator("#note")).toHaveValue("warmer light overall");
