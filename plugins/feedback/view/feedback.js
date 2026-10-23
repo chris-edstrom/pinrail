@@ -92,7 +92,7 @@
     const invalid = error ? 'aria-invalid="true"' : "";
     const describedBy = `hint-${q.id}${q.description ? " desc-" + q.id : ""}${error ? " error-" + q.id : ""}`;
     if (q.type === "text")
-      return `<span class="dictate-field"><textarea id="answer-${q.id}" class="pinrail-field text-answer" data-answer="${q.id}" data-pinrail-dictate rows="3" ${disabled} ${invalid} aria-labelledby="prompt-${q.id}" aria-describedby="${describedBy}" placeholder="${esc(q.placeholder || "Your response…")}">${esc(value || "")}</textarea><span class="dictate-mic" data-pinrail-dictate-for="answer-${q.id}"></span></span><div class="text-limit">${q.max_length ? `Up to ${q.max_length} characters` : ""}</div>`;
+      return `<div class="pinrail-compose pinrail-compose-wide answer-box"><textarea id="answer-${q.id}" class="pinrail-compose-input text-answer" data-answer="${q.id}" data-pinrail-dictate rows="3" ${disabled} ${invalid} aria-labelledby="prompt-${q.id}" aria-describedby="${describedBy}" placeholder="${esc(q.placeholder || "Your response…")}">${esc(value || "")}</textarea><span class="pinrail-compose-tools"><span data-pinrail-dictate-for="answer-${q.id}"></span></span></div><div class="text-limit">${q.max_length ? `Up to ${q.max_length} characters` : ""}</div>`;
     if (q.type === "checkbox")
       return `<label class="acknowledgment ${value === true ? "is-selected" : ""}"><input id="answer-${q.id}" type="checkbox" data-answer="${q.id}" ${value === true ? "checked" : ""} ${disabled} ${invalid} aria-labelledby="prompt-${q.id}" aria-describedby="${describedBy}"><span>${esc(q.checkbox_label || "I confirm")}</span></label>`;
     const options =
@@ -149,7 +149,7 @@
         ? `<details class="previous"><summary>Previous response</summary><p>${esc(C.describe(q, old.answer))}</p>${old.comment ? `<blockquote>${esc(old.comment)}</blockquote>` : ""}</details>`
         : "",
       q.type !== "text" && (!plugin.readonly || note)
-        ? `${note && !expanded ? (plugin.readonly ? `<div class="comment-view">${md(note)}</div>` : `<div class="comment-view is-editable" role="button" tabindex="0" data-comment-edit="${q.id}" title="Edit the comment">${md(note)}</div>`) : ""}<div id="comment-wrap-${q.id}" class="comment-wrap" ${expanded ? "" : "hidden"}><div class="comment-head"><label for="comment-${q.id}">Comment on this question</label>${note && !plugin.readonly ? `<button type="button" class="remove-comment" id="remove-comment-${q.id}" data-remove-comment="${q.id}">${ico("trash-2")} Remove comment</button>` : ""}</div><span class="dictate-field"><textarea id="comment-${q.id}" class="pinrail-field question-comment" data-comment="${q.id}" data-pinrail-dictate rows="3" placeholder="Add context, a caveat, or a different suggestion…" ${plugin.readonly ? "disabled" : ""}>${esc(note)}</textarea><span class="dictate-mic" data-pinrail-dictate-for="comment-${q.id}"></span></span></div>`
+        ? `${note && !expanded ? (plugin.readonly ? `<div class="comment-view">${md(note)}</div>` : `<div class="comment-view has-actions pinrail-comment"><div class="comment-text is-editable" role="button" tabindex="0" data-comment-edit="${q.id}" title="Edit the comment">${md(note)}</div><span class="pinrail-comment-actions"><button type="button" class="pinrail-comment-edit" data-comment-edit="${q.id}" title="Edit the comment" aria-label="Edit the comment"></button><button type="button" class="pinrail-comment-delete" data-remove-comment="${q.id}" title="Delete the comment" aria-label="Delete the comment"></button></span></div>`) : ""}<div id="comment-wrap-${q.id}" class="comment-wrap" ${expanded ? "" : "hidden"}><div class="comment-head"><label for="comment-${q.id}">Comment on this question</label>${note && !plugin.readonly ? `<button type="button" class="remove-comment" id="remove-comment-${q.id}" data-remove-comment="${q.id}">${ico("trash-2")} Remove comment</button>` : ""}</div><div class="pinrail-compose"><textarea id="comment-${q.id}" class="pinrail-compose-input question-comment" data-comment="${q.id}" data-pinrail-dictate rows="1" placeholder="Add context, a caveat, or a different suggestion…" ${plugin.readonly ? "disabled" : ""}>${esc(note)}</textarea><span class="pinrail-compose-keys">Enter to save · Shift+Enter for a new line</span><span class="pinrail-compose-tools"><span data-pinrail-dictate-for="comment-${q.id}"></span>${plugin.readonly ? "" : `<button type="button" class="pinrail-compose-icon pinrail-compose-send" data-comment-save="${q.id}" title="Save the comment (Enter)" aria-label="Save the comment"></button>`}</span></div></div>`
         : "",
     ].join("");
     return `<fieldset id="question-${q.id}" class="question is-${status} ${current === q.id ? "is-current" : ""}" data-question="${q.id}"><legend><span class="question-number" aria-hidden="true">${has ? Pinrail.icon("check", { size: 12 }) : String(number).padStart(2, "0")}</span><span id="prompt-${q.id}" class="question-prompt">${esc(q.prompt)}</span><span class="question-meta">${q.type !== "text" && !plugin.readonly && !note && !expanded ? `<button type="button" class="comment-toggle" id="comment-toggle-${q.id}" data-comment-edit="${q.id}">${Pinrail.icon("message-square-plus", { size: 11 })} Add a comment</button>` : ""}${value !== undefined && !plugin.readonly ? `<button type="button" class="clear-answer" id="clear-${q.id}" data-clear="${q.id}">${Pinrail.icon("rotate-ccw", { size: 11 })} Clear answer</button>` : ""}<span class="requirement ${q.required ? "is-required" : ""}">${q.required ? "Required" : "Optional"}</span></span></legend>
@@ -249,7 +249,8 @@
       app.querySelector(".sidebar").hidden = !railOpen;
     } else app.innerHTML = html;
     if (!confirm.element.isConnected) app.append(confirm.element);
-    for (const el of app.querySelectorAll(".question-comment, .text-answer")) if (el.offsetParent) grow(el);
+    for (const el of app.querySelectorAll(".text-answer")) if (el.offsetParent) grow(el);
+    for (const el of app.querySelectorAll(".question-comment")) if (el.offsetParent) Pinrail.fitField(el);
     const missing = Object.keys(invalid).length;
     confirm.confirmation(
       showErrors && missing && !plugin.readonly
@@ -379,9 +380,14 @@
       e.preventDefault();
       e.target.blur();
     }
+    if (e.key === "Enter" && !e.shiftKey && !e.metaKey && !e.ctrlKey && !composing && e.target.dataset?.comment) {
+      e.preventDefault();
+      e.target.blur();
+    }
   });
   app.addEventListener("input", (e) => {
-    if (e.target.tagName === "TEXTAREA") grow(e.target);
+    if (e.target.classList?.contains("question-comment")) Pinrail.fitField(e.target);
+    else if (e.target.tagName === "TEXTAREA") grow(e.target);
     if (e.target.tagName === "TEXTAREA") change(e);
   });
   app.addEventListener("change", (e) => {
@@ -394,7 +400,15 @@
     composing = false;
     change(e);
   });
+  app.addEventListener("mousedown", (e) => {
+    if (e.target.closest?.("[data-comment-save]")) e.preventDefault();
+  });
   app.addEventListener("click", (e) => {
+    const saveComment = e.target.closest?.("[data-comment-save]");
+    if (saveComment) {
+      document.getElementById("comment-" + saveComment.dataset.commentSave)?.blur();
+      return;
+    }
     // a link in a comment is followed, not taken as a click to edit it
     if (e.target.closest("a")) return;
     const button = e.target.closest("button, [data-comment-edit]");

@@ -1,16 +1,11 @@
-// The field to write a comment in: one box with the text, the microphone
-// and the button that adds the comment. It starts as a single line with the
-// buttons at its end; once the text has a new line, or wraps because it
-// reaches the buttons, the text takes the whole width and the buttons a row
-// of their own under it. It grows with the text up to MAX_HEIGHT, and only
-// then scrolls. Enter adds the comment, Shift+Enter starts a new line, and
-// Esc cancels when the field can be cancelled. Focused when it opens, the
-// cursor is at the end of the text.
-import { ArrowUp, X } from "lucide-react";
-import { useCallback, useLayoutEffect, useRef, useState, type Ref } from "react";
-
-/** The tallest the text grows before it scrolls: about eight lines. */
-const MAX_HEIGHT = 150;
+// The field to write a comment in: the SDK's comment field, one box with the
+// text, the microphone and the button that adds the comment. The SDK sizes
+// it: it grows with the text, and once the text wraps or has a new line, the
+// text takes the whole width and the buttons a row of their own under it,
+// with the keys on their left. Enter adds the comment, Shift+Enter starts a
+// new line, and Esc cancels when the field can be cancelled. Focused when it
+// opens, the cursor is at the end of the text.
+import { useCallback, useLayoutEffect, useRef, type Ref } from "react";
 
 export function Compose({
   id,
@@ -47,7 +42,6 @@ export function Compose({
   // a click on the buttons leaves the focus in the text, so that it does not
   // count as leaving the field: WebKit focuses nothing on a button's click
   const keepFocus = (e: React.MouseEvent) => e.preventDefault();
-  const [wide, setWide] = useState(false);
   // focused when it opens, with the cursor after the text
   useLayoutEffect(() => {
     const el = field.current;
@@ -56,28 +50,13 @@ export function Compose({
     el.setSelectionRange(el.value.length, el.value.length);
     // when the field opens: autoFocus does not change while it is open
   }, [autoFocus]);
-  // the height the text needs, measured with the height unset
+  // the SDK sizes the field to its text
   useLayoutEffect(() => {
-    const el = field.current;
-    if (!el) return;
-    if (!value) setWide(false);
-    el.style.height = "auto";
-    const needed = el.scrollHeight;
-    const style = getComputedStyle(el);
-    // one line of text and its padding; more than that means it wrapped
-    const oneLine =
-      (parseFloat(style.lineHeight) || 18) + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
-    if (!wide && value && (value.includes("\n") || needed > oneLine * 1.4)) {
-      // the next pass measures again at the full width
-      setWide(true);
-      return;
-    }
-    el.style.height = `${Math.min(needed, MAX_HEIGHT)}px`;
-    el.style.overflowY = needed > MAX_HEIGHT ? "auto" : "hidden";
-  }, [value, wide]);
+    if (field.current) window.Pinrail.fitField(field.current);
+  }, [value]);
   return (
     <div
-      className={`cm-compose${wide ? " cm-compose-wide" : ""}`}
+      className="pinrail-compose"
       onBlur={(e) => {
         if (onLeave && !e.currentTarget.contains(e.relatedTarget as Node | null)) onLeave();
       }}
@@ -85,7 +64,7 @@ export function Compose({
       <textarea
         id={id}
         ref={setField}
-        className="cm-compose-input"
+        className="pinrail-compose-input"
         rows={1}
         placeholder={placeholder}
         aria-label={placeholder}
@@ -103,32 +82,28 @@ export function Compose({
           }
         }}
       />
-      {wide ? <span className="cm-compose-keys">Enter to add · Shift+Enter for a new line</span> : null}
-      <div className="cm-compose-tools">
+      <span className="pinrail-compose-keys">Enter to add · Shift+Enter for a new line</span>
+      <div className="pinrail-compose-tools">
         <span data-pinrail-dictate-for={id} />
         {onCancel ? (
           <button
             type="button"
-            className="cm-compose-icon"
+            className="pinrail-compose-icon pinrail-compose-cancel"
             onMouseDown={keepFocus}
             onClick={onCancel}
             aria-label="Cancel"
             title="Cancel (Esc)"
-          >
-            <X />
-          </button>
+          />
         ) : null}
         <button
           type="button"
-          className="cm-compose-icon cm-compose-send"
+          className="pinrail-compose-icon pinrail-compose-send"
           onMouseDown={keepFocus}
           onClick={onSubmit}
           disabled={!value.trim()}
           aria-label="Add comment"
           title="Add comment (Enter). Shift+Enter starts a new line."
-        >
-          <ArrowUp />
-        </button>
+        />
       </div>
     </div>
   );

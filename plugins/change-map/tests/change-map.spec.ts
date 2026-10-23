@@ -1498,14 +1498,16 @@ test("the microphone in the comment field shows that it is recording, and its wo
   const plugin = await mountPlugin(page, dir, { review: dedup(), dictation: true });
   const f = plugin.frame;
   await f.locator('[data-node="tickets-endpoint"]').click();
-  const mic = f.locator(".cm-compose .pinrail-dictate");
+  const mic = f.locator(".pinrail-compose .pinrail-dictate");
   await expect(mic).toBeVisible();
   // the microphone lines up with the add button
   const middle = async (sel: string) => {
     const b = (await f.locator(sel).boundingBox())!;
     return b.y + b.height / 2;
   };
-  expect(Math.abs((await middle(".cm-compose .pinrail-dictate")) - (await middle(".cm-compose-send")))).toBeLessThan(1);
+  expect(
+    Math.abs((await middle(".pinrail-compose .pinrail-dictate")) - (await middle(".pinrail-compose-send"))),
+  ).toBeLessThan(1);
   const idle = await mic.evaluate((el) => getComputedStyle(el).color);
   await mic.click();
   await expect(mic).toHaveAttribute("aria-pressed", "true");
@@ -1525,16 +1527,16 @@ test("the comment field grows with its text, and gives the buttons a row once th
   const plugin = await mountPlugin(page, dir, { review: dedup() });
   const f = plugin.frame;
   await f.locator('[data-node="tickets-endpoint"]').click();
-  const box = f.locator(".cm-compose");
+  const box = f.locator(".pinrail-compose");
   const field = f.getByPlaceholder("Add a comment");
   const scrolls = () => field.evaluate((el) => el.scrollHeight > el.clientHeight + 1);
   await field.fill("Return the id.");
-  await expect(box).not.toHaveClass(/cm-compose-wide/);
+  await expect(box).not.toHaveClass(/pinrail-compose-wide/);
   const one = (await field.boundingBox())!.height;
   // text that reaches the buttons
   await field.fill("Return the id of the ticket the first request created, with the 409 and its status.");
-  await expect(box).toHaveClass(/cm-compose-wide/);
-  await expect(box.locator(".cm-compose-keys")).toHaveText("Enter to add · Shift+Enter for a new line");
+  await expect(box).toHaveClass(/pinrail-compose-wide/);
+  await expect(box.locator(".pinrail-compose-keys")).toHaveText("Enter to add · Shift+Enter for a new line");
   expect(await scrolls()).toBe(false);
   // four lines: taller, and no scrollbar
   await field.fill("One\nTwo\nThree\nFour");
@@ -1547,8 +1549,8 @@ test("the comment field grows with its text, and gives the buttons a row once th
   expect(await scrolls()).toBe(true);
   // empty again, it is one line
   await field.fill("");
-  await expect(box).not.toHaveClass(/cm-compose-wide/);
-  await expect(box.locator(".cm-compose-keys")).toHaveCount(0);
+  await expect(box).not.toHaveClass(/pinrail-compose-wide/);
+  await expect(box.locator(".pinrail-compose-keys")).toBeHidden();
 });
 
 test("the area comment field stays inside its dialog when it takes a second line", async ({ page }) => {
@@ -1567,12 +1569,12 @@ test("the area comment field stays inside its dialog when it takes a second line
   await field.pressSequentially("A");
   await field.press("Shift+Enter");
   await field.pressSequentially("very large");
-  await expect(f.locator(".cm-pop .cm-compose")).toHaveClass(/cm-compose-wide/);
+  await expect(f.locator(".cm-pop .pinrail-compose")).toHaveClass(/pinrail-compose-wide/);
   const pop = (await f.locator(".cm-pop").boundingBox())!;
-  const box = (await f.locator(".cm-pop .cm-compose").boundingBox())!;
+  const box = (await f.locator(".cm-pop .pinrail-compose").boundingBox())!;
   expect(box.x + box.width).toBeLessThanOrEqual(pop.x + pop.width);
   // wide enough for the keys on the buttons' row
-  const keys = f.locator(".cm-pop .cm-compose-keys");
+  const keys = f.locator(".cm-pop .pinrail-compose-keys");
   expect(await keys.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
 });
 
@@ -1589,6 +1591,23 @@ test("the hand-over says Approve with comments when the person approves and has 
   await expect.poll(() => plugin.lastStatus()).toBe("Approve with comments");
 });
 
+test("a comment has edit and delete at its top right, shown on hover", async ({ page }) => {
+  const plugin = await mountPlugin(page, dir, { review: dedup() });
+  const f = plugin.frame;
+  await f.locator('[data-node="tickets-endpoint"]').click();
+  await f.getByPlaceholder("Add a comment").fill("Return the id.");
+  await f.getByPlaceholder("Add a comment").press("Enter");
+  const comment = f.locator(".cm-comment", { hasText: "Return the id." });
+  await expect(comment).toHaveClass(/pinrail-comment/);
+  await comment.hover();
+  await comment.getByRole("button", { name: "Edit the comment" }).click();
+  await expect(f.getByRole("textbox", { name: "Edit the comment" })).toBeFocused();
+  await f.getByRole("textbox", { name: "Edit the comment" }).press("Escape");
+  await comment.hover();
+  await comment.getByRole("button", { name: "Delete the comment" }).click();
+  await expect(f.locator(".cm-comment", { hasText: "Return the id." })).toHaveCount(0);
+});
+
 test("editing a comment uses the comment field, with the cursor at the end", async ({ page }) => {
   const plugin = await mountPlugin(page, dir, { review: dedup() });
   const f = plugin.frame;
@@ -1598,7 +1617,7 @@ test("editing a comment uses the comment field, with the cursor at the end", asy
   await f.locator(".cm-comment-editable", { hasText: "Return the id." }).click();
   const edit = f.getByRole("textbox", { name: "Edit the comment" });
   await expect(edit).toBeFocused();
-  await expect(f.locator(".cm-comment-editing .cm-compose")).toBeVisible();
+  await expect(f.locator(".cm-comment-editing .pinrail-compose")).toBeVisible();
   expect(await edit.evaluate((el: HTMLTextAreaElement) => [el.selectionStart, el.value.length])).toEqual([14, 14]);
   expect(await edit.evaluate((el) => getComputedStyle(el).resize)).toBe("none");
   // typing goes after the text, and the cancel button keeps the comment as it was

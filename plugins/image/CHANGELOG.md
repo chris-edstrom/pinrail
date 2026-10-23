@@ -8,6 +8,10 @@ carries it.
 
 ### Changed
 
+- A comment on an area can be edited: its pencil, or a click on it, zooms
+  in on the area and opens its comment again. The image's note and each
+  area's comment have edit and delete buttons, shown while the pointer is
+  over them or the focus is in them, which replace Show and Remove.
 - The fields for an image's note and for a comment on an area look like
   the change map's: one box with the text, the microphone and an add
   button at its end. Once the text wraps, the buttons move to a row

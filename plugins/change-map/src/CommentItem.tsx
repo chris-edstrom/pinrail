@@ -1,7 +1,7 @@
-// One comment: its text, which a click turns into a field to edit, and a
-// button to delete it. Enter saves, Esc cancels, and saving it empty
-// deletes it. A decided review shows the text alone.
-import { Trash2 } from "lucide-react";
+// One comment: its text, which a click turns into a field to edit, and the
+// SDK's edit and delete buttons at its top right, shown on hover or focus.
+// Enter saves, Esc cancels, and saving it empty deletes it. A decided review
+// shows the text alone.
 import { useId, useState, type ReactNode } from "react";
 import { Compose } from "./Compose";
 import { markdown } from "./markdown";
@@ -57,7 +57,7 @@ export function CommentItem({
     );
   return (
     <div
-      className={`cm-comment ${readonly ? "" : "cm-comment-editable"} ${className ?? ""}`}
+      className={`cm-comment ${readonly ? "" : "cm-comment-editable pinrail-comment"} ${className ?? ""}`}
       onClick={readonly ? undefined : () => setEditing(true)}
       title={readonly ? undefined : "Click to edit"}
     >
@@ -66,18 +66,28 @@ export function CommentItem({
         <div className="cm-md" dangerouslySetInnerHTML={{ __html: markdown(comment.body, language) }} />
       </div>
       {readonly ? null : (
-        <button
-          type="button"
-          className="pinrail-btn pinrail-btn-ghost cm-comment-delete"
-          aria-label="Delete the comment"
-          title="Delete"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-        >
-          <Trash2 />
-        </button>
+        <span className="pinrail-comment-actions">
+          <button
+            type="button"
+            className="pinrail-comment-edit"
+            aria-label="Edit the comment"
+            title="Edit the comment"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditing(true);
+            }}
+          />
+          <button
+            type="button"
+            className="pinrail-comment-delete"
+            aria-label="Delete the comment"
+            title="Delete the comment"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+          />
+        </span>
       )}
     </div>
   );

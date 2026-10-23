@@ -4,6 +4,19 @@ This plugin is released with the Pinrail app, which carries it among its
 official plugins. Each version names the release of the app that first
 carries it.
 
+## [1.2.0] - Unreleased
+
+### Changed
+
+- A saved comment has edit and delete buttons at the right of its header,
+  shown while the pointer is over it or the focus is in it. A click on the
+  comment's text edits it, as well as showing what it is about.
+  They replace the Edit and Delete links under the comment.
+- The comment field looks like the change map's: one box with the text,
+  the microphone and the cancel and add buttons at its end. Once the
+  text wraps, the buttons move to a row under it, with the keys that add
+  the comment and start a new line.
+
 ## [1.1.0] - Pinrail 0.3.0
 
 ### Added

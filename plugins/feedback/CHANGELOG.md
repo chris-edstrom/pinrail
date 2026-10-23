@@ -4,6 +4,19 @@ This plugin is released with the Pinrail app, which carries it among its
 official plugins. Each version names the release of the app that first
 carries it.
 
+## [1.2.0] - Unreleased
+
+### Changed
+
+- A saved comment has edit and delete buttons at the right of its header,
+  shown while the pointer is over it or the focus is in it. A click on the
+  comment's text still edits it.
+- A free-text answer and a comment on a question are drawn as the comment
+  field of the other official plugins, with the microphone on a row under
+  the text rather than in its corner.
+- A comment on a question starts as one line and grows as it is written.
+  Enter or its arrow saves it, and Shift+Enter starts a new line.
+
 ## [1.1.0] - Pinrail 0.3.0
 
 ### Added

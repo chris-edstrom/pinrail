@@ -644,9 +644,11 @@
         font: 11.5px var(--pinrail-mono);
         color: var(--pinrail-faint);
       }
-      .regions .acts {
-        display: flex;
-        gap: 4px;
+      .regions .region-text {
+        cursor: pointer;
+      }
+      .regions .region-text.is-editable {
+        cursor: text;
       }
       .pinrail-empty {
         color: var(--pinrail-faint);
@@ -760,10 +762,26 @@
       .image-note > :last-child {
         margin-bottom: 0;
       }
-      .image-note.is-editable {
+      /* the note's text, which a click edits, and edit and delete at its top right */
+      .image-note.has-actions {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+      }
+      .image-note-text {
+        flex: 1;
+        min-width: 0;
+      }
+      .image-note-text > :first-child {
+        margin-top: 0;
+      }
+      .image-note-text > :last-child {
+        margin-bottom: 0;
+      }
+      .image-note-text.is-editable {
         cursor: text;
       }
-      .image-note.is-editable:hover {
+      .image-note.has-actions:hover {
         border-left-color: var(--pinrail-accent);
       }
 
@@ -1139,7 +1157,11 @@
         if (!note || !S.picking) return;
         const id = P.images[S.sel].id;
         const v = S.verdicts[id] || { action: null };
-        S.verdicts[id] = { ...v, regions: [...(v.regions || []), { ...S.picking, note }] };
+        const { edit, ...region } = S.picking;
+        const regions = [...(v.regions || [])];
+        if (edit != null) regions[edit] = { ...region, note };
+        else regions.push({ ...region, note });
+        S.verdicts[id] = { ...v, regions };
         S.picking = null;
         S.armed = false;
         S.keepScroll = true;
@@ -1161,6 +1183,12 @@
         S.keepScroll = true;
         plugin.draft(S.verdicts);
         render();
+      }
+      function editRegion(i) {
+        const r = regionsOf(P.images[S.sel].id)[i];
+        if (!r || plugin.readonly) return;
+        showRegion(i);
+        startRegion({ ...r, edit: i });
       }
       function showRegion(i) {
         const e = shownImage();
@@ -1550,6 +1578,7 @@
           label: "What to change here",
           placeholder: "What should change here?",
           keys: "Enter to add · Shift+Enter for a new line",
+          value: S.picking.note || "",
           cancel: `data-pop="cancel"`,
           send: { attrs: `data-pop="add"`, label: "Comment", allowEmpty: false },
         })}
@@ -1619,7 +1648,7 @@
           : v.note?.trim()
             ? plugin.readonly
               ? `<div class="image-note">${Pinrail.markdown(v.note)}</div>`
-              : `<div class="image-note is-editable" role="button" tabindex="0" data-edit-note title="Edit the note">${Pinrail.markdown(v.note)}</div>`
+              : `<div class="image-note has-actions pinrail-comment"><div class="image-note-text is-editable" role="button" tabindex="0" data-edit-note title="Edit the note">${Pinrail.markdown(v.note)}</div><span class="pinrail-comment-actions"><button type="button" class="pinrail-comment-edit" data-edit-note title="Edit the note" aria-label="Edit the note"></button><button type="button" class="pinrail-comment-delete" data-delete-note title="Delete the note" aria-label="Delete the note"></button></span></div>`
             : plugin.readonly
               ? ""
               : `<button type="button" class="add-note" data-edit-note>${Pinrail.icon("message-square", { size: 13 })} Add a note</button>`
@@ -1633,8 +1662,12 @@
               ? `<ol class="regions">${regions
                   .map(
                     (r, i) => `
-            <li class="${S.lit === i ? "lit" : ""}"><span class="num">${i + 1}</span><span>${esc(r.note)}<br><span class="where">${esc(describe(r, e))}</span></span>
-              <span class="acts"><button type="button" class="pinrail-btn quiet" data-show="${i}">Show</button>${plugin.readonly ? "" : `<button type="button" class="pinrail-btn quiet" data-remove="${i}">Remove</button>`}</span></li>`,
+            <li class="pinrail-comment${S.lit === i ? " lit" : ""}"><span class="num">${i + 1}</span>${
+              plugin.readonly
+                ? `<span class="region-text" data-show="${i}">${esc(r.note)}<br><span class="where">${esc(describe(r, e))}</span></span>`
+                : `<span class="region-text is-editable" data-edit-region="${i}" title="Edit the comment">${esc(r.note)}<br><span class="where">${esc(describe(r, e))}</span></span>
+              <span class="pinrail-comment-actions"><button type="button" class="pinrail-comment-edit" data-edit-region="${i}" title="Edit the comment" aria-label="Edit the comment"></button><button type="button" class="pinrail-comment-delete" data-remove="${i}" title="Delete the comment" aria-label="Delete the comment"></button></span>`
+            }</li>`,
                   )
                   .join("")}</ol>`
               : `<p class="pinrail-empty">${plugin.readonly ? "None." : "Drag a box over part of the image, or click a spot, to ask for a change there. From the keyboard: p pins the centre of the view, b boxes what is in view."}</p>`
@@ -1823,10 +1856,13 @@
           return render();
         }
         if (t.closest("[data-compare]")) return toggleCompare();
+        if (t.closest("[data-delete-note]") && !plugin.readonly) return deleteNote();
         // a link in a note is followed, not taken as a click to edit it
         if (t.closest("[data-edit-note]") && !t.closest("a") && !plugin.readonly) return openNote();
         const show = t.closest("[data-show]");
         if (show) return showRegion(Number(show.dataset.show));
+        const edit = t.closest("[data-edit-region]");
+        if (edit) return editRegion(Number(edit.dataset.editRegion));
         const remove = t.closest("[data-remove]");
         if (remove) return removeRegion(Number(remove.dataset.remove));
         const pick = t.closest("[data-pick]");
@@ -1864,6 +1900,15 @@
         S.noteOpen = P.images[S.sel].id;
         S.focusNoteNext = true;
         S.keepScroll = true;
+        render();
+      }
+      function deleteNote() {
+        const id = P.images[S.sel].id;
+        const { note, ...rest } = S.verdicts[id] || {};
+        S.verdicts[id] = rest;
+        S.armed = false;
+        S.keepScroll = true;
+        plugin.draft(S.verdicts);
         render();
       }
       function closeNote() {

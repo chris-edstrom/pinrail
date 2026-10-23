@@ -61,6 +61,32 @@ test("verdicts, notes and own comments become exactly the decision", async ({ pa
   });
 });
 
+test("a saved note and your comment have edit and delete at the right of their header", async ({ page }) => {
+  const plugin = await mountPlugin(page, dir, { review: round2() });
+  const f = plugin.frame;
+  await f.locator("#card-19 button", { hasText: "Reject" }).click();
+  await f.getByLabel("note for proposal 19").fill("the backfill covers it");
+  await f.getByLabel("note for proposal 19").press("Enter");
+  const note = f.locator("#card-19 .note.saved");
+  await expect(note.locator(".note-head")).toContainText("REJECTION REASON");
+  await note.getByRole("button", { name: "Edit the note" }).click();
+  await expect(f.getByLabel("note for proposal 19")).toHaveValue("the backfill covers it");
+  await f.getByLabel("note for proposal 19").press("Enter");
+  await f.locator("#card-19 .note.saved").getByRole("button", { name: "Delete the note" }).click();
+  await expect(f.locator("#card-19 .note.saved")).toHaveCount(0);
+
+  await f.locator('[data-filesec="lib/acme/tickets.ex"] .diff-row').filter({ hasText: "Repo.insert_all" }).hover();
+  await f.getByLabel("comment on lib/acme/tickets.ex:150", { exact: true }).click();
+  await f.getByLabel("your comment").fill("is insert_all chunked anywhere?");
+  await f.getByLabel("your comment").press("Enter");
+  const mine = f.locator("[data-comment]");
+  await mine.locator(".mine-head").getByRole("button", { name: "Edit" }).click();
+  await expect(f.getByLabel("your comment")).toHaveValue("is insert_all chunked anywhere?");
+  await f.getByLabel("your comment").press("Escape");
+  await mine.locator(".mine-head").getByRole("button", { name: "Delete" }).click();
+  await expect(f.locator("[data-comment]")).toHaveCount(0);
+});
+
 test("keyboard: a / x / j decide and move; with nothing undecided, a hand-over goes at once", async ({ page }) => {
   const plugin = await mountPlugin(page, dir, { review: round2() });
   const f = plugin.frame;

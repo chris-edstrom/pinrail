@@ -8,6 +8,9 @@ carries it.
 
 ### Changed
 
+- A saved note and a comment of your own have edit and delete buttons at
+  the right of their header, shown while the pointer is over them or the
+  focus is in them. They replace the note's delete cross.
 - The fields for a proposal's note and for a comment of your own look
   like the change map's: one box with the text, the microphone and an
   add button at its end. Once the text wraps, the buttons move to a row

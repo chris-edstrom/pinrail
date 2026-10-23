@@ -486,12 +486,14 @@ function openDialog(anchor) {
       )
       .join("") +
     `</div>` +
-    // the comment supports dictation, with a microphone in the field's corner
-    `<span class="dictate-field"><textarea id="compose-body" data-pinrail-dictate placeholder="${PLACEHOLDERS[kind]}" aria-label="Comment">${edited ? esc(edited.body) : ""}</textarea>` +
-    `<span class="dictate-mic" data-pinrail-dictate-for="compose-body"></span></span>` +
-    `<div class="foot"><span class="hint"><kbd>Enter</kbd> to ${edited ? "save" : "add"}, <kbd>Esc</kbd> to cancel</span>` +
-    `<button type="button" class="pinrail-btn pinrail-btn-ghost" id="compose-cancel">Cancel</button>` +
-    `<button type="button" class="pinrail-btn pinrail-btn-primary" id="compose-save">${edited ? "Save" : "Comment"}</button></div>`;
+    // the SDK's comment field, with the microphone and the buttons at its end
+    `<div class="pinrail-compose">` +
+    `<textarea class="pinrail-compose-input" id="compose-body" rows="1" data-pinrail-dictate placeholder="${PLACEHOLDERS[kind]}" aria-label="Comment">${edited ? esc(edited.body) : ""}</textarea>` +
+    `<span class="pinrail-compose-keys">Enter to ${edited ? "save" : "add"} · Shift+Enter for a new line</span>` +
+    `<span class="pinrail-compose-tools"><span data-pinrail-dictate-for="compose-body"></span>` +
+    `<button type="button" class="pinrail-compose-icon pinrail-compose-cancel" id="compose-cancel" title="Cancel (Esc)" aria-label="Cancel"></button>` +
+    `<button type="button" class="pinrail-compose-icon pinrail-compose-send" id="compose-save" title="${edited ? "Save" : "Comment"} (Enter)" aria-label="${edited ? "Save" : "Comment"}"></button>` +
+    `</span></div>`;
   dialog.hidden = false;
   const box = pane.getBoundingClientRect();
   const at =
@@ -504,8 +506,15 @@ function openDialog(anchor) {
   markTarget(target);
   dialog.scrollIntoView({ block: "nearest" });
   const area = $("compose-body");
+  fitCompose(area);
   area.focus();
   area.setSelectionRange(area.value.length, area.value.length);
+}
+
+/** Sizes the field as the SDK does, and greys its add button while it is empty. */
+function fitCompose(area) {
+  Pinrail.fitField(area);
+  $("compose-save").disabled = !area.value.trim();
 }
 
 function closeDialog() {
@@ -551,6 +560,9 @@ $("dialog").addEventListener("change", (event) => {
   }
   $("compose-body").placeholder = PLACEHOLDERS[event.target.value];
   $("compose-body").focus();
+});
+$("dialog").addEventListener("input", (event) => {
+  if (event.target.id === "compose-body") fitCompose(event.target);
 });
 $("dialog").addEventListener("click", (event) => {
   if (event.target.id === "compose-save") saveDialog();
@@ -626,13 +638,13 @@ function drawBars() {
 }
 new ResizeObserver(() => drawBars()).observe($("rendered"));
 
-function where(target, comment) {
+function where(target, comment, actions = "") {
   const lineText =
     target.start_line === target.end_line
       ? `line ${target.start_line}`
       : `lines ${target.start_line}–${target.end_line}`;
   return (
-    `<div class="where">${comment && kindOf(comment) === "question" ? `<span class="question-tag">Question</span>` : ""}<span class="kind">${esc(target.kind)}</span><span class="section" title="${esc(target.section || "")}">${esc(target.section || "")}</span><span class="lines">${lineText}</span></div>` +
+    `<div class="where">${comment && kindOf(comment) === "question" ? `<span class="question-tag">Question</span>` : ""}<span class="kind">${esc(target.kind)}</span><span class="section" title="${esc(target.section || "")}">${esc(target.section || "")}</span><span class="lines">${lineText}</span>${actions}</div>` +
     (target.quote && target.kind === "text" ? `<div class="quote">${esc(target.quote)}</div>` : "")
   );
 }
@@ -648,10 +660,11 @@ function renderSide() {
       : `<div class="pinrail-empty">Hover a heading or a diagram and choose Comment, or select a passage in either pane.</div>`;
   }
   for (const c of shown) {
-    html += `<div class="card${kindOf(c) === "question" ? " is-question" : ""}" data-comment="${c.id}">${where(c.target, c)}<p class="body">${esc(c.body)}</p>`;
-    if (!readonly)
-      html += `<div class="actions"><button type="button" data-edit="${c.id}">Edit</button><button type="button" data-delete="${c.id}">Delete</button></div>`;
-    html += `</div>`;
+    // edit and delete at the right of the header, and a click on the text edits it too
+    const actions = readonly
+      ? ""
+      : `<span class="pinrail-comment-actions"><button type="button" class="pinrail-comment-edit" data-edit="${c.id}" title="Edit the comment" aria-label="Edit the comment"></button><button type="button" class="pinrail-comment-delete" data-delete="${c.id}" title="Delete the comment" aria-label="Delete the comment"></button></span>`;
+    html += `<div class="card pinrail-comment${kindOf(c) === "question" ? " is-question" : ""}" data-comment="${c.id}">${where(c.target, c, actions)}<p class="body${readonly ? "" : " is-editable"}">${esc(c.body)}</p></div>`;
   }
   const previous = plugin.previous && plugin.previous.decision ? plugin.previous.decision.data : null;
   if (previous && previous.comments && previous.comments.length) {
@@ -692,6 +705,14 @@ $("list").addEventListener("click", (event) => {
     if (editing === id) closeDialog();
     comments = comments.filter((c) => c.id !== id);
     return changed();
+  }
+  // a click on a comment's text shows what it is about and edits it
+  const body = t.closest(".body.is-editable");
+  if (body) {
+    const c = comments.find((x) => x.id === Number(body.closest("[data-comment]").dataset.comment));
+    if (!c) return;
+    reveal(c.target.start_line, c.target.end_line);
+    return editComment(c.id);
   }
   // a comment in the list: to what it is about
   const card = t.closest("[data-comment]");

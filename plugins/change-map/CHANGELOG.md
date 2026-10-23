@@ -4,6 +4,16 @@ This plugin is released with the Pinrail app, which carries it among its
 official plugins. Each version names the release of the app that first
 carries it.
 
+## [1.1.0] - Unreleased
+
+### Changed
+
+- A saved comment has edit and delete buttons at the right of its header,
+  shown while the pointer is over it or the focus is in it. A click on the
+  comment's text still edits it.
+- The comment field is drawn by the SDK's stylesheet, which the other
+  official plugins share. It looks and works as before.
+
 ## [1.0.0] - Pinrail 0.4.0
 
 The first version. It shows a code change as a diagram of its parts and

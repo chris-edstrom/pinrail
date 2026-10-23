@@ -970,127 +970,6 @@ body.cm-resizing-panel * {
 .cm-comment .pinrail-btn {
   padding: 2px 4px;
 }
-/* the comment field: a line with the text, the microphone and the
-   add button; wide, the text takes the whole width and the buttons a row
-   under it */
-.cm-compose {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px 4px;
-  padding: 3px 4px;
-  border: 1px solid var(--pinrail-border-strong);
-  border-radius: 6px;
-  background: var(--pinrail-bg);
-}
-/* focused, a stronger grey border rather than the accent */
-.cm-compose:focus-within {
-  border-color: var(--pinrail-faint);
-}
-.cm-compose-wide {
-  padding: 4px 4px 3px;
-}
-.cm-compose-input {
-  flex: 1;
-  min-width: 0;
-  box-sizing: border-box;
-  padding: 3px 8px;
-  border: 0;
-  background: none;
-  color: var(--pinrail-text);
-  font: 12.5px var(--pinrail-sans);
-  line-height: 18px;
-  resize: none;
-  overflow: hidden;
-}
-.cm-compose-wide .cm-compose-input {
-  flex-basis: 100%;
-}
-.cm-compose-input:focus {
-  outline: none;
-}
-.cm-compose-wide .cm-compose-tools {
-  margin-left: auto;
-}
-/* in the wide field, the keys on the left of the buttons' row */
-.cm-compose-keys {
-  /* no width of its own: it fills what the buttons leave, so it never
-     widens the field */
-  flex: 1 1 0;
-  width: 0;
-  min-width: 0;
-  padding-left: 8px;
-  color: var(--pinrail-faint);
-  font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cm-compose-tools {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: none;
-}
-/* the SDK puts the microphone in this placeholder; as a flex box it adds
-   no line height, so the microphone lines up with the buttons */
-.cm-compose-tools > [data-pinrail-dictate-for] {
-  display: flex;
-  align-items: center;
-}
-/* the microphone at the size of the field's other buttons; its colours,
-   and its red while it records, are the SDK's */
-.cm-compose-tools .pinrail-dictate {
-  width: 24px;
-  height: 24px;
-  border-radius: 5px;
-}
-/* the cancel and add buttons, drawn as the SDK draws the microphone */
-.cm-compose-icon {
-  display: inline-grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: 5px;
-  background: none;
-  color: var(--pinrail-faint);
-  cursor: pointer;
-}
-.cm-compose-icon:hover:not(:disabled) {
-  background: var(--pinrail-bg-hover);
-  color: var(--pinrail-text);
-}
-.cm-compose-icon svg.lucide,
-.cm-compose-tools .pinrail-dictate svg {
-  width: 15px;
-  height: 15px;
-}
-/* the add button: an arrow in a filled circle, in the accent colour once
-   there is text to add */
-.cm-compose-send,
-.cm-compose-send:hover:not(:disabled) {
-  width: 22px;
-  height: 22px;
-  margin: 1px;
-  border-radius: 50%;
-  background: var(--pinrail-accent);
-  color: var(--pinrail-accent-fg, #fff);
-}
-.cm-compose-send:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--pinrail-accent) 85%, var(--pinrail-text));
-}
-.cm-compose-send svg.lucide {
-  width: 13px;
-  height: 13px;
-  stroke-width: 2.5;
-}
-.cm-compose-send:disabled {
-  background: var(--pinrail-bg-hover);
-  color: var(--pinrail-faint);
-  cursor: default;
-}
 
 /* the map and the diff drawer over its bottom */
 
@@ -1576,7 +1455,7 @@ body.cm-picking * {
   border-top: 1px solid var(--pinrail-border);
 }
 /* the field to comment on a line, in the drawer under the line */
-.cm-line-comments .cm-compose {
+.cm-line-comments .pinrail-compose {
   margin: 6px 10px 6px 4px;
 }
 .cm-comment {
@@ -1592,13 +1471,6 @@ body.cm-picking * {
 .cm-comment-editing {
   display: grid;
   gap: 4px;
-}
-.cm-comment-delete {
-  opacity: 0;
-}
-.cm-comment:hover .cm-comment-delete,
-.cm-comment-delete:focus-visible {
-  opacity: 1;
 }
 
 /* areas of a screenshot commented on */

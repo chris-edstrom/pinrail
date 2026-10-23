@@ -342,6 +342,50 @@ test("the rail can be folded away, and the shell is asked to remember it", async
   await expect.poll(() => plugin.lastSettingsSet()).toEqual({ rail_open: true });
 });
 
+test("a comment starts as one line, and Enter or its arrow saves it", async ({ page }) => {
+  const plugin = await mount(page);
+  const f = plugin.frame;
+  const approach = q(f, "approach");
+  const box = approach.getByLabel("Comment on this question");
+  await approach.getByRole("button", { name: "Add a comment" }).click();
+  const field = approach.locator(".pinrail-compose");
+  await expect(field).not.toHaveClass(/pinrail-compose-wide/);
+  const oneLine = (await box.boundingBox())!.height;
+  expect(oneLine).toBeLessThan(32);
+
+  // a second line puts the keys and the arrow on a row under the text
+  await box.fill("the logs\nand the replay");
+  await expect(field).toHaveClass(/pinrail-compose-wide/);
+  await expect(field.locator(".pinrail-compose-keys")).toBeVisible();
+  await approach.getByRole("button", { name: "Save the comment" }).click();
+  await expect(box).toBeHidden();
+  await expect(approach.locator(".comment-view")).toContainText("and the replay");
+
+  await approach.locator(".comment-view").click();
+  await box.fill("only the logs");
+  await box.press("Enter");
+  await expect(box).toBeHidden();
+  await expect(approach.locator(".comment-view")).toHaveText("only the logs");
+});
+
+test("a saved comment has edit and delete at its top right", async ({ page }) => {
+  const plugin = await mount(page);
+  const f = plugin.frame;
+  const approach = q(f, "approach");
+  const box = approach.getByLabel("Comment on this question");
+  await approach.getByRole("button", { name: "Add a comment" }).click();
+  await box.fill("because of the logs");
+  await box.press("Enter");
+  const shown = approach.locator(".comment-view");
+  await shown.getByRole("button", { name: "Edit the comment" }).click();
+  await expect(box).toBeFocused();
+  await expect(box).toHaveValue("because of the logs");
+  await box.press("Enter");
+  await approach.locator(".comment-view").getByRole("button", { name: "Delete the comment" }).click();
+  await expect(approach.locator(".comment-view")).toHaveCount(0);
+  await expect(approach.getByRole("button", { name: "Add a comment" })).toBeVisible();
+});
+
 test("a comment shows as Markdown, and a click on it edits it", async ({ page }) => {
   const plugin = await mount(page);
   const f = plugin.frame;
@@ -371,9 +415,9 @@ test("a comment shows as Markdown, and a click on it edits it", async ({ page })
   await box.press("Escape");
   await expect(box).toBeHidden();
 
-  // from the keyboard too
-  await shown.focus();
-  await shown.press("Enter");
+  // from the keyboard too, on the comment's text
+  await shown.locator(".comment-text").focus();
+  await shown.locator(".comment-text").press("Enter");
   await expect(box).toBeFocused();
   await box.press("Escape");
 
@@ -527,13 +571,13 @@ test("where the questions are narrow, an answered question's buttons go under it
   expect(meta!.y).toBeGreaterThanOrEqual(prompt!.y + prompt!.height);
 });
 
-test("a free-text answer and a comment can be dictated, from a microphone in their corner", async ({ page }) => {
+test("a free-text answer and a comment can be dictated, from a microphone under their text", async ({ page }) => {
   const plugin = await mount(page, "02-launch.json", { dictation: true });
   const f = plugin.frame;
   const answer = f.locator("textarea.text-answer").first();
   const id = (await answer.getAttribute("data-answer"))!;
   const question = q(f, id);
-  await question.locator(".dictate-mic").getByRole("button", { name: "Dictate" }).click();
+  await question.locator("[data-pinrail-dictate-for]").getByRole("button", { name: "Dictate" }).click();
   // the field receives the dictated words as they arrive
   await plugin.say("practical and specific");
   await plugin.say("practical and specific, for small teams");
@@ -545,7 +589,7 @@ test("a free-text answer and a comment can be dictated, from a microphone in the
   // a comment field, once opened
   const first = f.locator("[data-question]").first();
   await first.getByRole("button", { name: /Add a comment/ }).click();
-  await first.locator(".dictate-mic").getByRole("button", { name: "Dictate" }).click();
+  await first.locator("[data-pinrail-dictate-for]").getByRole("button", { name: "Dictate" }).click();
   await plugin.say("only if the partners agree");
   await expect(first.locator("textarea.question-comment")).toHaveValue("only if the partners agree");
 });

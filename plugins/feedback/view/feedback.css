@@ -585,31 +585,16 @@ input:disabled {
   background: var(--pinrail-accent-bg);
 }
 
+/* an answer is the SDK's comment field, always wide: three lines of text to
+   start, growing as it is written in (grow), and the microphone on the row
+   under it. It is an answer in a form, so it has no add button, and Enter
+   starts a new line. A comment on a question is the SDK's field as the
+   other plugins draw it, one line to start, saved with Enter or its arrow. */
 .text-answer {
-  display: block;
-  width: 100%;
-  min-height: 90px;
+  min-height: 66px;
   max-height: 320px;
-  padding: 9px 11px;
-  border-radius: 6px;
-  background: var(--pinrail-bg);
   font-size: 13px;
-  line-height: 1.65;
-  resize: none;
-}
-/* a field that supports dictation, with the app's microphone in its
-   corner when the app provides dictation */
-.dictate-field {
-  position: relative;
-  display: block;
-}
-.dictate-field:has(.pinrail-dictate) textarea {
-  padding-right: 38px;
-}
-.dictate-mic {
-  position: absolute;
-  top: 4px;
-  right: 4px;
+  line-height: 1.6;
 }
 .text-limit {
   margin-top: 4px;
@@ -617,11 +602,6 @@ input:disabled {
   text-align: right;
   color: var(--pinrail-faint);
   font-size: 10px;
-}
-.question-comment:focus-visible,
-.text-answer:focus-visible {
-  outline: none;
-  border-color: var(--pinrail-accent);
 }
 textarea:disabled {
   opacity: 1;
@@ -736,10 +716,26 @@ textarea:disabled {
 .comment-view > :last-child {
   margin-bottom: 0;
 }
-.comment-view.is-editable {
+/* the comment's text, which a click edits, and edit and delete at its top right */
+.comment-view.has-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.comment-text {
+  flex: 1;
+  min-width: 0;
+}
+.comment-text > :first-child {
+  margin-top: 0;
+}
+.comment-text > :last-child {
+  margin-bottom: 0;
+}
+.comment-text.is-editable {
   cursor: text;
 }
-.comment-view.is-editable:hover {
+.comment-view.has-actions:hover {
   border-left-color: var(--pinrail-accent);
 }
 
@@ -771,18 +767,6 @@ textarea:disabled {
 }
 .remove-comment:hover {
   color: var(--pinrail-danger);
-}
-.question-comment {
-  display: block;
-  width: 100%;
-  min-height: 72px;
-  max-height: 240px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: var(--pinrail-bg);
-  font-size: 12.5px;
-  line-height: 1.6;
-  resize: none;
 }
 
 /* what the round before decided, for a question being asked again */
@@ -826,7 +810,7 @@ textarea:disabled {
   font-size: 12.5px;
   font-weight: 500;
 }
-.is-error .text-answer {
+.is-error .answer-box {
   border-color: color-mix(in oklab, var(--pinrail-danger) 45%, var(--pinrail-border));
 }
 

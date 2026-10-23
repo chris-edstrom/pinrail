@@ -974,14 +974,18 @@
       .mine .pinrail-compose {
         margin-top: 6px;
       }
-      .note-del {
-        flex: none;
-        color: var(--pinrail-faint);
-        padding: 2px;
-        border-radius: 4px;
+      /* a saved note: its label and its edit and delete on one row, the text
+         under them */
+      .note.saved {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 3px;
       }
-      button.note-del:hover {
-        color: var(--pinrail-danger);
+      .note-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 22px;
       }
       .thread {
         margin: 10px 16px 0;
@@ -2179,12 +2183,14 @@
             : dec.action === "reject"
               ? "REJECTION REASON"
               : "NOTE — SAVED WITH YOUR DECISION";
-        const text = `<span class="note-label">${label}</span>${noteSegsHtml(note)}`;
-        return `<div class="note ${kind}">${
+        const actions = RO()
+          ? ""
+          : `<span class="pinrail-comment-actions"><button class="pinrail-comment-edit" data-act="open-note" data-id="${p.id}" title="Edit the note" aria-label="Edit the note"></button><button class="pinrail-comment-delete" data-act="del-note" data-id="${p.id}" title="Delete the note" aria-label="Delete the note"></button></span>`;
+        const head = `<div class="note-head"><span class="note-label">${label}</span>${actions}</div>`;
+        return `<div class="note saved pinrail-comment ${kind}">${head}${
           RO()
-            ? `<span class="note-text">${text}</span>`
-            : `<button class="bare note-text" data-act="open-note" data-id="${p.id}" title="Click to edit">${text}</button>
-    <button class="bare note-del" data-act="del-note" data-id="${p.id}" title="Delete note">${Pinrail.icon("x", { size: 13 })}</button>`
+            ? `<span class="note-text">${noteSegsHtml(note)}</span>`
+            : `<button class="bare note-text" data-act="open-note" data-id="${p.id}" title="Click to edit">${noteSegsHtml(note)}</button>`
         }</div>`;
       }
       function noteEditorHtml(p, dec) {
@@ -2358,13 +2364,11 @@
       /* ---------- render: reviewer's comments / composer ---------- */
       const anchorOf = (x) => `${x.file.split("/").pop()}:${x.line}${x.side === "old" ? " (old)" : ""}`;
       function manualHtml(m) {
-        const mineBtn = (act, icon, name) =>
-          `<button class="icon-btn" data-act="${act}" data-mid="${m.id}" title="${name}">${Pinrail.icon(icon, { size: 14, label: name })}</button>`;
         const controls = RO()
           ? ""
-          : mineBtn("edit-manual", "pencil", "Edit") + mineBtn("del-manual", "trash-2", "Delete");
-        return `<div class="mine" data-comment="${m.id}">
-    <div class="mine-head">${Pinrail.icon("message-square", { size: 13 })}<span class="mine-label">YOUR COMMENT</span><span class="mine-at">${esc(anchorOf(m))}</span><span class="mine-for">for the agent to assess</span><span class="grow"></span>${controls}</div>
+          : `<span class="pinrail-comment-actions"><button class="pinrail-comment-edit" data-act="edit-manual" data-mid="${m.id}" title="Edit" aria-label="Edit"></button><button class="pinrail-comment-delete" data-act="del-manual" data-mid="${m.id}" title="Delete" aria-label="Delete"></button></span>`;
+        return `<div class="mine pinrail-comment" data-comment="${m.id}">
+    <div class="mine-head">${Pinrail.icon("message-square", { size: 13 })}<span class="mine-label">YOUR COMMENT</span><span class="mine-at">${esc(anchorOf(m))}</span><span class="mine-for">for the agent to assess</span>${controls}</div>
     ${RO() ? `<div class="mine-text">${esc(m.body)}</div>` : `<button class="bare mine-text" data-act="edit-manual" data-mid="${m.id}" title="Click to edit">${esc(m.body)}</button>`}
   </div>`;
       }

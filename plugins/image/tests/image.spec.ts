@@ -154,6 +154,51 @@ test("a decision the app refuses says why in the confirmation bar", async ({ pag
   await expect(bar).toBeHidden();
 });
 
+test("an image's note has edit and delete at its top right", async ({ page }) => {
+  const plugin = await mountPlugin(page, dir, { review: round() });
+  const f = plugin.frame;
+  await ready(plugin);
+  await f.getByRole("button", { name: "Add a note" }).click();
+  await f.locator("#note").fill("Warmer light");
+  await f.locator("#note").press("Enter");
+  const note = f.locator(".image-note");
+  await note.getByRole("button", { name: "Edit the note" }).click();
+  await expect(f.locator("#note")).toHaveValue("Warmer light");
+  await f.locator("#note").press("Enter");
+  await f.locator(".image-note").getByRole("button", { name: "Delete the note" }).click();
+  await expect(f.locator(".image-note")).toHaveCount(0);
+  await expect(f.getByRole("button", { name: "Add a note" })).toBeVisible();
+});
+
+test("an area's comment can be edited and deleted from the list, and a click on it edits it", async ({ page }) => {
+  const plugin = await mountPlugin(page, dir, { review: round() });
+  const f = plugin.frame;
+  await ready(plugin);
+  await page.mouse.click(...(await onImage(plugin, 0.875, 0.3)));
+  await f.locator("#region-note").fill("Nose up");
+  await f.locator("#region-note").press("Enter");
+  const item = f.locator(".regions li").first();
+  await expect(item).toContainText("Nose up");
+
+  // the pencil opens the area's comment again, with its text, and saving replaces it
+  await item.getByRole("button", { name: "Edit the comment" }).click();
+  await expect(f.locator("#pop")).toContainText("Point");
+  await expect(f.locator("#region-note")).toHaveValue("Nose up");
+  await f.locator("#region-note").fill("Nose up a little");
+  await f.locator("#region-note").press("Enter");
+  await expect(f.locator(".regions li")).toHaveCount(1);
+  await expect(item).toContainText("Nose up a little");
+
+  // a click on the comment edits it too
+  await item.locator(".region-text").click();
+  await expect(f.locator("#region-note")).toHaveValue("Nose up a little");
+  await f.locator("#region-note").press("Escape");
+  await expect(item).toContainText("Nose up a little");
+
+  await item.getByRole("button", { name: "Delete the comment" }).click();
+  await expect(f.locator(".regions li")).toHaveCount(0);
+});
+
 test("a dragged box and a clicked point go back in fractions and in pixels", async ({ page }) => {
   const plugin = await mountPlugin(page, dir, { review: round() });
   const f = plugin.frame;

@@ -296,6 +296,24 @@ test("the button to comment on a selection sits at the end of the selection", as
   expect(pick.top - end.y).toBeLessThan(20);
 });
 
+test("a comment has edit and delete at the right of its header, and a click on its text edits it", async ({ page }) => {
+  const plugin = await mount(page);
+  const f = plugin.frame;
+  await f.locator(".rendered h2").first().hover();
+  await f.locator(".rendered h2 [data-comment-section]").first().click();
+  await f.locator("#compose-body").fill("First");
+  await f.locator("#compose-body").press("Enter");
+  const head = f.locator(".card .where");
+  await expect(head.getByRole("button", { name: "Edit the comment" })).toBeVisible();
+  await expect(head.getByRole("button", { name: "Delete the comment" })).toBeVisible();
+
+  await f.locator(".card .body").click();
+  await expect(f.locator("#compose-body")).toHaveValue("First");
+  await f.locator("#compose-body").press("Escape");
+  await head.getByRole("button", { name: "Delete the comment" }).click();
+  await expect(f.locator(".card")).toHaveCount(0);
+});
+
 test("a comment can be edited and deleted, and the draft keeps them", async ({ page }) => {
   const plugin = await mount(page);
   const f = plugin.frame;
@@ -417,7 +435,7 @@ test("a comment can be dictated, from a microphone in the field's corner", async
   await select(plugin, ".rendered li");
   await f.locator("#pick").click();
   const dialog = f.getByRole("dialog", { name: "Comment" });
-  await dialog.locator(".dictate-mic").getByRole("button", { name: "Dictate" }).click();
+  await dialog.locator("[data-pinrail-dictate-for]").getByRole("button", { name: "Dictate" }).click();
   await plugin.say("slow or failing");
   await plugin.say("slow or failing, which one");
   await expect(f.locator("#compose-body")).toHaveValue("slow or failing, which one");
