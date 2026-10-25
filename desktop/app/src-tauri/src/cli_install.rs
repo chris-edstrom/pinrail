@@ -432,7 +432,7 @@ const COMMAND_MARK: &str = "__pinrail_command__=";
 /// in time.
 pub fn ask_login_shell() -> Option<ShellView> {
     #[cfg(windows)]
-    return Some(windows_view());
+    return windows_view();
     #[cfg(not(windows))]
     ask_unix_login_shell()
 }
@@ -487,10 +487,11 @@ fn ask_shell(shell: &str) -> Option<ShellView> {
 
 /// What a new terminal sees on Windows: the PATH the registry holds, the
 /// machine's folders before the user's, and the first program called
-/// `pinrail` on it, tried with each extension of PATHEXT in turn.
+/// `pinrail` on it, tried with each extension of PATHEXT in turn. None when
+/// the registry cannot be read.
 #[cfg(windows)]
-fn windows_view() -> ShellView {
-    let (machine, user) = registry_paths().unwrap_or_default();
+fn windows_view() -> Option<ShellView> {
+    let (machine, user) = registry_paths()?;
     let path = [machine, user]
         .into_iter()
         .flatten()
@@ -504,44 +505,23 @@ fn windows_view() -> ShellView {
             .map(|e| dir.join(format!("{PROGRAM}{e}")))
             .find(|p| p.is_file())
     });
-    ShellView { path, command }
+    Some(ShellView { path, command })
 }
 
 /// The raw machine and user `Path` values, with their `%VARIABLES%`
-/// unexpanded. PowerShell prints them as UTF-8, where `reg query` would use
-/// the console's code page and garble a folder with accents in its name.
+/// unexpanded. The registry returns UTF-16, so the console's code page does
+/// not matter. None when neither can be read.
 #[cfg(windows)]
 fn registry_paths() -> Option<(Option<String>, Option<String>)> {
-    use std::os::windows::process::CommandExt;
-    const SCRIPT: &str = r#"
-[Console]::OutputEncoding = [Text.Encoding]::UTF8
-$names = 'DoNotExpandEnvironmentNames'
-$u = (Get-Item 'HKCU:\Environment').GetValue('Path', '', $names)
-$m = (Get-Item 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment').GetValue('Path', '', $names)
-'M=' + $m
-'U=' + $u
-"#;
-    let out = Command::new("powershell")
-        .args(["-NoProfile", "-NonInteractive", "-Command", SCRIPT])
-        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
-        .stdin(Stdio::null())
-        .stderr(Stdio::null())
-        .output()
-        .ok()?;
-    out.status
-        .success()
-        .then(|| parse_registry_paths(&String::from_utf8_lossy(&out.stdout)))
-}
-
-/// The `M=` and `U=` lines of the script above.
-#[cfg_attr(not(windows), allow(dead_code))]
-fn parse_registry_paths(text: &str) -> (Option<String>, Option<String>) {
-    let value = |tag: &str| {
-        text.lines()
-            .find_map(|line| line.strip_prefix(tag))
-            .map(|v| v.trim().to_string())
-    };
-    (value("M="), value("U="))
+    use windows_registry::{CURRENT_USER, LOCAL_MACHINE};
+    let read =
+        |key: &windows_registry::Key, path: &str| key.open(path).ok()?.get_string("Path").ok();
+    let machine = read(
+        LOCAL_MACHINE,
+        r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
+    );
+    let user = read(CURRENT_USER, "Environment");
+    (machine.is_some() || user.is_some()).then_some((machine, user))
 }
 
 /// The folders of a registry PATH value, `%VARIABLES%` expanded from the
@@ -582,48 +562,66 @@ fn expand_variables(text: &str) -> String {
 /// Puts `dir` at the end of the user's PATH, if it is not there, keeping the
 /// `%VARIABLES%` the value already has, then tells running programs, such as
 /// Explorer, that the environment changed, so that a terminal opened next
-/// sees it. True when the PATH changed. A failure carries PowerShell's first
-/// line of complaint.
+/// sees it. True when the PATH changed. A PATH value that is not a string is
+/// left alone, since writing it back as one would change its meaning.
 #[cfg(windows)]
+#[allow(unsafe_code)]
 pub fn add_to_user_path(dir: &Path) -> Result<bool, String> {
-    use std::os::windows::process::CommandExt;
-    const SCRIPT: &str = r#"
-$ErrorActionPreference = 'Stop'
-try {
-  $key = 'HKCU:\Environment'
-  $raw = (Get-Item $key).GetValue('Path', '', 'DoNotExpandEnvironmentNames')
-  $dir = $env:PINRAIL_ADD_DIR
-  if ($raw -split ';' | Where-Object { [Environment]::ExpandEnvironmentVariables($_).TrimEnd('\') -ieq $dir.TrimEnd('\') }) { exit 3 }
-  $new = if ($raw) { $raw.TrimEnd(';') + ';' + $dir } else { $dir }
-  Set-ItemProperty -Path $key -Name Path -Value $new -Type ExpandString
-  Add-Type -Namespace Pinrail -Name Native -MemberDefinition '[DllImport("user32.dll", CharSet = CharSet.Auto)] public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr result);'
-  $result = [UIntPtr]::Zero
-  [void][Pinrail.Native]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$result)
-} catch {
-  [Console]::Error.WriteLine($_.Exception.Message)
-  exit 1
-}
-"#;
-    let out = Command::new("powershell")
-        .args(["-NoProfile", "-NonInteractive", "-Command", SCRIPT])
-        .env("PINRAIL_ADD_DIR", dir)
-        .creation_flags(0x0800_0000)
-        .stdin(Stdio::null())
-        .output()
-        .map_err(|e| format!("cannot update the PATH: {e}"))?;
-    match out.status.code() {
-        Some(0) => Ok(true),
-        Some(3) => Ok(false),
-        _ => {
-            let why = String::from_utf8_lossy(&out.stderr);
-            let why = why.lines().next().unwrap_or("").trim();
-            Err(format!(
-                "cannot add {} to the PATH{}{why}",
-                dir.display(),
-                if why.is_empty() { "" } else { ": " }
-            ))
-        }
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        HWND_BROADCAST, SMTO_ABORTIFHUNG, SendMessageTimeoutA, WM_SETTINGCHANGE,
+    };
+    let fail = |e: String| format!("cannot add {} to the PATH: {e}", dir.display());
+    let key = windows_registry::CURRENT_USER
+        .create("Environment")
+        .map_err(|e| fail(e.to_string()))?;
+    // the value as written, with its %VARIABLES% unexpanded
+    let raw = match key.get_value("Path") {
+        Ok(value) => match value.ty() {
+            windows_registry::Type::String | windows_registry::Type::ExpandString => {
+                String::try_from(value).map_err(|e| fail(e.to_string()))?
+            }
+            _ => {
+                return Err(format!(
+                    "cannot add {} to the PATH: the user PATH is not a string value",
+                    dir.display()
+                ));
+            }
+        },
+        // no PATH of the user's yet
+        Err(_) => String::new(),
+    };
+    let wanted = dir.to_string_lossy();
+    let wanted = wanted.trim_end_matches('\\');
+    let same = |entry: &str| {
+        expand_variables(entry.trim())
+            .trim_end_matches('\\')
+            .eq_ignore_ascii_case(wanted)
+    };
+    if raw.split(';').any(same) {
+        return Ok(false);
     }
+    let new = if raw.is_empty() {
+        wanted.to_string()
+    } else {
+        format!("{};{wanted}", raw.trim_end_matches(';'))
+    };
+    key.set_expand_string("Path", &new)
+        .map_err(|e| fail(e.to_string()))?;
+    // tell Explorer and the rest that the environment changed, so that a
+    // terminal opened next sees it
+    // SAFETY: the message and the NUL-terminated string outlive the call.
+    unsafe {
+        SendMessageTimeoutA(
+            HWND_BROADCAST,
+            WM_SETTINGCHANGE,
+            0,
+            c"Environment".as_ptr() as isize,
+            SMTO_ABORTIFHUNG,
+            5000,
+            std::ptr::null_mut(),
+        );
+    }
+    Ok(true)
 }
 
 #[cfg_attr(windows, allow(dead_code))]
@@ -648,19 +646,6 @@ fn parse_shell(text: &str) -> Option<ShellView> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn the_registry_paths_are_read_from_the_scripts_tagged_lines() {
-        let out = "M=C:\\Windows;C:\\Windows\\System32\r\nU=%USERPROFILE%\\bin;C:\\Users\\José\\tools\r\n";
-        assert_eq!(
-            parse_registry_paths(out),
-            (
-                Some("C:\\Windows;C:\\Windows\\System32".to_string()),
-                Some("%USERPROFILE%\\bin;C:\\Users\\José\\tools".to_string())
-            )
-        );
-        assert_eq!(parse_registry_paths("ERROR"), (None, None));
-    }
 
     #[test]
     fn a_registry_path_expands_the_variables_it_can() {
