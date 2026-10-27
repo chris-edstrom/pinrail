@@ -587,8 +587,9 @@ pub fn add_to_user_path(dir: &Path) -> Result<bool, String> {
                 ));
             }
         },
-        // no PATH of the user's yet
-        Err(_) => String::new(),
+        // no PATH of the user's yet: ERROR_FILE_NOT_FOUND
+        Err(e) if e.code().0 == 0x8007_0002_u32 as i32 => String::new(),
+        Err(e) => return Err(fail(e.to_string())),
     };
     let wanted = dir.to_string_lossy();
     let wanted = wanted.trim_end_matches('\\');
