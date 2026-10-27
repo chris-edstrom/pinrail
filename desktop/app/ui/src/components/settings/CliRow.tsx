@@ -101,8 +101,8 @@ export function CliRow({ open }: { open: boolean }) {
     </span>
   ) : (
     <span>
-      {verb} <span className="mono">{status.link.endsWith(".exe") ? "pinrail.exe" : "pinrail"}</span> into <span className="mono">{folder(link)}</span>, so agents and
-      scripts can run it
+      {verb} <span className="mono">{status.link.endsWith(".exe") ? "pinrail.exe" : "pinrail"}</span> into{" "}
+      <span className="mono">{folder(link)}</span>, so agents and scripts can run it
     </span>
   );
 
